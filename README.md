@@ -1,0 +1,331 @@
+# rust-hctr2
+
+Pure Rust implementation of HCTR2, HCTR3, and their beyond-birthday-bound secure variants (CHCTR2, HCTR2-TwKD), plus format-preserving variants.
+
+This is a port of [zig-hctr2](https://github.com/jedisct1/zig-hctr2).
+
+HCTR2 and HCTR3 are length-preserving tweakable wide-block encryption modes. CHCTR2 and HCTR2-TwKD are beyond-birthday-bound (BBB) secure variants that achieve approximately 85-bit security instead of HCTR2's 64-bit birthday-bound security. The format-preserving variants (HCTR2-FP and HCTR3-FP) are also length-preserving and additionally preserve character sets (e.g., decimal digits remain decimal).
+
+These modes are designed for full-disk encryption, filename encryption, and other applications where nonces and authentication tags would be impractical.
+
+## What is HCTR2/HCTR3?
+
+HCTR2 and HCTR3 are modern tweakable encryption modes that provide the following properties:
+
+- Length-preserving: ciphertext is the same length as plaintext (no expansion beyond a minimum length)
+- Wide-block: changing any single bit of plaintext affects the entire ciphertext
+- Tweakable: supports a public tweak parameter for domain separation
+- No authentication tag or nonce required
+- Built entirely from standard primitives (AES, Polyval, SHA-256)
+
+These modes are particularly useful when you need encryption but cannot afford the overhead of nonces or authentication tags, such as encrypting fixed-size disk sectors, filenames, or database fields.
+
+## Which construction should I use?
+
+### HCTR2
+
+Use HCTR2 when you need:
+
+- Fast, single-key encryption
+- Good performance on modern hardware with AES-NI
+- A simpler construction with fewer moving parts
+- Compatibility with existing HCTR2 implementations
+
+HCTR2 uses a single key and relies on Polyval for universal hashing and XCTR mode for the wide-block construction.
+
+### HCTR3
+
+Use HCTR3 when you need:
+
+- Commitment security (resistance to key-manipulation attacks)
+- Protection in scenarios where encryption keys might be known or compromised (cloud storage, message franking)
+- Collision-resistant tweak processing for stronger domain separation
+- Applications requiring both confidentiality and commitment properties
+
+HCTR3 derives two keys from the input key and uses SHA-256 to hash tweaks before processing, providing collision resistance in known-key scenarios. This prevents commitment attacks (CMT-4) that break HCTR2 when adversaries can manipulate keys. HCTR3 employs ELK (Encrypted LFSR Keystream) mode with constant-time LFSR implementation instead of XCTR, providing additional security margins in constrained environments.
+
+### CHCTR2 (Cascaded HCTR2)
+
+Use CHCTR2 when you need:
+
+- Beyond-birthday-bound security (~85-bit instead of ~64-bit)
+- No restrictions on tweak usage
+- Multi-user security guarantees
+- Compatibility with NIST's BBB accordion mode requirements
+
+CHCTR2 cascades HCTR2 twice with two independent keys, achieving 2n/3-bit multi-user security. The construction optimizes the middle hash layers: Z_{1,2} = H1(T,R) XOR H2(T,R). Cost is 2 block cipher calls + 3 field multiplications per block.
+
+Reference: "Beyond-Birthday-Bound Security with HCTR2" (ASIACRYPT 2025)
+
+### HCTR2-TwKD (Tweak-Based Key Derivation)
+
+Use HCTR2-TwKD when you need:
+
+- Beyond-birthday-bound security with minimal overhead
+- Same performance as standard HCTR2
+- Tweak-based key derivation (each unique tweak derives a unique key)
+- Applications where the same tweak is not reused excessively
+
+HCTR2-TwKD derives a fresh HCTR2 key from each tweak using the CENC construction, achieving 2n/3-bit security when the number of encryptions per tweak is bounded by approximately 2^42. Cost per block is identical to HCTR2 (1 BC call + 2 field multiplications), with a small per-tweak overhead for key derivation.
+
+Reference: "Beyond-Birthday-Bound Security with HCTR2" (ASIACRYPT 2025)
+
+### Format-Preserving Variants (HCTR2-FP and HCTR3-FP)
+
+Use the format-preserving variants when you need:
+
+- Encryption that preserves the character set (e.g., decimal digits remain decimal)
+- Encrypted values in a specific radix (base-10, base-16, base-64, etc.)
+- Filename encryption where certain characters are forbidden
+- Database encryption where column types must be preserved
+
+Like standard HCTR2/HCTR3, the format-preserving variants are length-preserving (no ciphertext expansion). They additionally maintain the character set by operating on digits in a specified radix. HCTR2-FP and HCTR3-FP support any radix from 2 to 256. Pre-configured variants are provided for common radixes:
+
+- Decimal (radix 10): useful for credit cards, IDs, phone numbers
+- Hexadecimal (radix 16): useful for hex-encoded data
+- Base64 (radix 64): useful for URL-safe encryption
+
+Note that format-preserving modes have higher minimum message lengths (e.g., 39 digits for decimal, 32 for hex, 22 for base64) compared to standard HCTR2/HCTR3 (16 bytes minimum).
+
+### Common Radix Values
+
+The following table shows common radix values for different use cases:
+
+| Radix | Alphabet               | Use Cases                                | Notes                                  |
+| ----- | ---------------------- | ---------------------------------------- | -------------------------------------- |
+| 2     | `01`                   | Binary data, bit flags                   | Maximum length, minimal alphabet       |
+| 4     | `ACGT` or `0123`       | DNA sequences, quaternary data           | Bioinformatics, compact binary         |
+| 8     | `0-7`                  | Octal numbers                            | Unix file permissions, legacy systems  |
+| 10    | `0-9`                  | Credit cards, phone numbers, numeric IDs | Pre-configured Human-readable numbers  |
+| 16    | `0-9A-F`               | Hex strings, hashes, MAC addresses       | Pre-configured Common in computing     |
+| 26    | `A-Z`                  | Alphabetic codes, license keys           | Case-insensitive text                  |
+| 32    | `A-Z2-7`               | Base32 (RFC 4648), TOTP keys             | No ambiguous chars, 2FA tokens         |
+| 32    | `0-9A-HJKMNP-TV-Z`     | Crockford Base32                         | Human-friendly, excludes I,L,O,U       |
+| 36    | `0-9A-Z`               | Short IDs, URL shorteners                | Case-insensitive, compact              |
+| 58    | `1-9A-HJ-NP-Za-km-z`   | Bitcoin/crypto addresses                 | No confusing chars (0,O,I,l removed)   |
+| 62    | `0-9A-Za-z`            | URL shorteners, compact IDs              | Case-sensitive, very compact           |
+| 63    | `0-9A-Za-z_`           | Programming identifiers                  | Alphanumeric + underscore              |
+| 64    | `A-Za-z0-9+/`          | Base64 encoding, binary data             | Pre-configured Standard Base64         |
+| 64    | `A-Za-z0-9-_`          | URL-safe Base64                          | Web-safe variant, no padding           |
+| 66    | `A-Za-z0-9-._~`        | URL unreserved chars (RFC 3986)          | Safe for URLs without encoding         |
+| 85    | ASCII printable        | Ascii85, binary encoding                 | Compact, printable characters          |
+| 91    | ASCII printable subset | Base91                                   | Very compact binary encoding           |
+| 95    | All printable ASCII    | Full printable character set             | Maximum compactness, may need escaping |
+
+Filesystem-Safe Radixes:
+
+- Radix 62-64: Safe across all major filesystems (Windows, Linux, macOS)
+- Radix 66: URL unreserved characters, safe for both filenames and URLs
+- Avoid characters: `/` (Unix/Linux), `\/:*?"<>|` (Windows), `:` (macOS Finder)
+
+Common Pre-configured Variants:
+
+- `Hctr2Fp_128_Decimal` / `Hctr3Fp_128_Decimal`: Radix 10
+- `Hctr2Fp_128_Hex` / `Hctr3Fp_128_Hex`: Radix 16
+- `Hctr2Fp_128_Base64` / `Hctr3Fp_128_Base64`: Radix 64
+- AES-256 variants also available (e.g., `Hctr2Fp_256_Decimal`)
+
+You can create custom radix variants using the generic `Hctr2Fp` and `Hctr3Fp` types:
+
+```rust
+use rust_hctr2::Hctr2Fp;
+
+// Base-36 for case-insensitive alphanumeric identifiers
+type Cipher36 = Hctr2Fp<16, 36>;  // AES-128, radix 36
+
+// Base-58 for cryptocurrency-style addresses
+type Cipher58 = Hctr2Fp<32, 58>;  // AES-256, radix 58
+
+// Base-62 for compact URL shorteners
+type Cipher62 = Hctr2Fp<16, 62>;  // AES-128, radix 62
+```
+
+## Installation
+
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+rust-hctr2 = "0.1"
+```
+
+Or from git:
+
+```toml
+[dependencies]
+rust-hctr2 = { git = "https://github.com/jedisct1/rust-hctr2" }
+```
+
+## Usage Examples
+
+### HCTR2 Encryption
+
+```rust
+use rust_hctr2::Hctr2_128;
+
+fn main() -> Result<(), rust_hctr2::Hctr2Error> {
+    // Initialize cipher with a 128-bit key
+    let key = [0u8; 16];
+    let cipher = Hctr2_128::new(&key);
+
+    // Encrypt a message
+    let plaintext = b"Hello, World!!!!"; // Minimum 16 bytes
+    let tweak = b"sector-42";
+    let mut ciphertext = [0u8; 16];
+
+    cipher.encrypt(plaintext, tweak, &mut ciphertext)?;
+
+    // Decrypt the message
+    let mut decrypted = [0u8; 16];
+    cipher.decrypt(&ciphertext, tweak, &mut decrypted)?;
+
+    assert_eq!(plaintext, &decrypted);
+    Ok(())
+}
+```
+
+### HCTR3 Encryption
+
+```rust
+use rust_hctr2::Hctr3_256;
+
+fn main() -> Result<(), rust_hctr2::Hctr3Error> {
+    // Initialize with AES-256
+    let key = [0u8; 32];
+    let cipher = Hctr3_256::new(&key);
+
+    let plaintext = b"Sensitive data!!"; // Minimum 16 bytes
+    let tweak = b"database-record-123";
+    let mut ciphertext = [0u8; 16];
+
+    cipher.encrypt(plaintext, tweak, &mut ciphertext)?;
+
+    let mut decrypted = [0u8; 16];
+    cipher.decrypt(&ciphertext, tweak, &mut decrypted)?;
+
+    assert_eq!(plaintext, &decrypted);
+    Ok(())
+}
+```
+
+### CHCTR2 Encryption (Beyond-Birthday-Bound)
+
+```rust
+use rust_hctr2::Chctr2_128;
+
+fn main() -> Result<(), rust_hctr2::Chctr2Error> {
+    // CHCTR2 requires two keys (combined into one 32-byte key for AES-128)
+    let key = [0u8; 32];  // K1 || K2
+    let cipher = Chctr2_128::new(&key);
+
+    let plaintext = b"BBB-secure data!";
+    let tweak = b"any-tweak-value";
+    let mut ciphertext = [0u8; 16];
+
+    cipher.encrypt(plaintext, tweak, &mut ciphertext)?;
+
+    let mut decrypted = [0u8; 16];
+    cipher.decrypt(&ciphertext, tweak, &mut decrypted)?;
+
+    assert_eq!(plaintext, &decrypted);
+    Ok(())
+}
+```
+
+### HCTR2-TwKD Encryption (Tweak-Based Key Derivation)
+
+```rust
+use rust_hctr2::Hctr2TwKD_128;
+
+fn main() -> Result<(), rust_hctr2::Hctr2TwKDError> {
+    // Master key for key derivation
+    let master_key = [0u8; 16];
+    let cipher = Hctr2TwKD_128::new(&master_key);
+
+    let plaintext = b"Sector data here";
+    let tweak = b"sector-42";  // Max 14 bytes for KDF tweak
+    let mut ciphertext = [0u8; 16];
+
+    // Each unique tweak derives a unique HCTR2 key
+    cipher.encrypt(plaintext, tweak, &mut ciphertext)?;
+
+    let mut decrypted = [0u8; 16];
+    cipher.decrypt(&ciphertext, tweak, &mut decrypted)?;
+
+    assert_eq!(plaintext, &decrypted);
+    Ok(())
+}
+```
+
+### Format-Preserving Encryption (Decimal)
+
+```rust
+use rust_hctr2::Hctr2Fp_128_Decimal;
+
+fn main() -> Result<(), rust_hctr2::Hctr2FpError> {
+    let key = [0u8; 16];
+    let cipher = Hctr2Fp_128_Decimal::new(&key);
+
+    // Encrypt a credit card number (all digits remain digits)
+    // Min 39 digits for decimal
+    let plaintext = b"123456789012345678901234567890123456789";
+    let tweak = b"user-cc-field";
+    let mut ciphertext = [0u8; 39];
+
+    cipher.encrypt(plaintext, tweak, &mut ciphertext)?;
+    // ciphertext contains only decimal digits
+
+    let mut decrypted = [0u8; 39];
+    cipher.decrypt(&ciphertext, tweak, &mut decrypted)?;
+
+    assert_eq!(plaintext, &decrypted);
+    Ok(())
+}
+```
+
+## Security Considerations
+
+### No authentication
+
+HCTR2 and HCTR3 provide confidentiality only, not authenticity. They do not detect tampering or forgery. If your threat model includes active attackers who can modify ciphertexts, you need additional authentication (e.g., HMAC, digital signatures) or should use an authenticated encryption mode like AES-GCM instead.
+
+### Minimum message lengths
+
+- HCTR2/HCTR3: 16 bytes minimum
+- HCTR2-FP/HCTR3-FP: depends on radix (e.g., 39 digits for radix-10, 32 digits for radix-16, 22 digits for radix-64)
+
+Messages shorter than the minimum will return an `InputTooShort` error.
+
+Important: Format-preserving modes are length-preserving (no expansion). Input length in digits equals output length in digits.
+
+### Format-preserving first block encoding
+
+In HCTR2-FP and HCTR3-FP, the first ciphertext block uses base-radix encoding, which may produce statistically distinguishable patterns. For example, in base-10 (decimal), the distribution of first-block digits may not appear uniformly random. However, the underlying encrypted data remains cryptographically secure - the encoding bias does not leak information about the plaintext.
+
+### Key management
+
+Standard key management practices apply:
+
+- Use cryptographically secure random number generators for key generation
+- Store keys securely (e.g., hardware security modules, encrypted key stores)
+- Implement proper key rotation policies
+- Never hardcode keys in source code
+
+## Performance
+
+Both HCTR2 and HCTR3 are designed to leverage AES-NI instructions on modern processors. Performance characteristics:
+
+- HCTR2 is slightly faster due to simpler construction
+- HCTR3 has higher security margins but slightly more overhead
+- Format-preserving modes have additional computational cost from radix conversion
+- Both scale well with message size (wide-block encryption is parallelized)
+
+## References
+
+- [Length-preserving encryption with HCTR2](https://eprint.iacr.org/2021/1441) - Paul Crowley, Nathan Huckleberry, Eric Biggers (IACR ePrint Archive)
+- [HCTR3](https://csrc.nist.gov/files/pubs/sp/800/197/iprd/docs/3_samvadini.pdf) - NIST SP 800-197 Workshop presentation
+- [Beyond-Birthday-Bound Security with HCTR2](https://doi.org/10.1007/978-3-031-85848-6_1) - Chen, Y.L., et al. (ASIACRYPT 2025, LNCS 16245, pp. 3-34)
+
+## License
+
+MIT OR Apache-2.0

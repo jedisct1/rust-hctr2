@@ -6,7 +6,7 @@ homepage = "https://github.com/jedisct1/hctr2-rs"
 repository = "https://github.com/jedisct1/hctr2-rs"
 description = "HCTR2 and HCTR3 length-preserving encryption with format-preserving variants"
 license = "MIT OR Apache-2.0"
-keywords = ["cryptography", "encryption", "hctr2", "hctr3", "fpe", "disk-encryption"]
+keywords = ["encryption", "hctr2", "hctr3", "fpe", "disk-encryption"]
 categories = ["cryptography", "no-std"]
 readme = "README.md"
 

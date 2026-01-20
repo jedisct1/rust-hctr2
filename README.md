@@ -1,4 +1,4 @@
-# rust-hctr2
+# hctr2-rs
 
 Pure Rust implementation of HCTR2, HCTR3, and their beyond-birthday-bound secure variants (CHCTR2, HCTR2-TwKD), plus format-preserving variants.
 
@@ -128,7 +128,7 @@ Common Pre-configured Variants:
 You can create custom radix variants using the generic `Hctr2Fp` and `Hctr3Fp` types:
 
 ```rust
-use rust_hctr2::Hctr2Fp;
+use hctr2_rs::Hctr2Fp;
 
 // Base-36 for case-insensitive alphanumeric identifiers
 type Cipher36 = Hctr2Fp<16, 36>;  // AES-128, radix 36
@@ -146,14 +146,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rust-hctr2 = "0.1"
+hctr2-rs = "0"
 ```
 
 Or from git:
 
 ```toml
 [dependencies]
-rust-hctr2 = { git = "https://github.com/jedisct1/rust-hctr2" }
+hctr2-rs = { git = "https://github.com/jedisct1/hctr2-rs" }
 ```
 
 ## Usage Examples
@@ -161,9 +161,9 @@ rust-hctr2 = { git = "https://github.com/jedisct1/rust-hctr2" }
 ### HCTR2 Encryption
 
 ```rust
-use rust_hctr2::Hctr2_128;
+use hctr2_rs::Hctr2_128;
 
-fn main() -> Result<(), rust_hctr2::Hctr2Error> {
+fn main() -> Result<(), hctr2_rs::Hctr2Error> {
     // Initialize cipher with a 128-bit key
     let key = [0u8; 16];
     let cipher = Hctr2_128::new(&key);
@@ -187,9 +187,9 @@ fn main() -> Result<(), rust_hctr2::Hctr2Error> {
 ### HCTR3 Encryption
 
 ```rust
-use rust_hctr2::Hctr3_256;
+use hctr2_rs::Hctr3_256;
 
-fn main() -> Result<(), rust_hctr2::Hctr3Error> {
+fn main() -> Result<(), hctr2_rs::Hctr3Error> {
     // Initialize with AES-256
     let key = [0u8; 32];
     let cipher = Hctr3_256::new(&key);
@@ -211,9 +211,9 @@ fn main() -> Result<(), rust_hctr2::Hctr3Error> {
 ### CHCTR2 Encryption (Beyond-Birthday-Bound)
 
 ```rust
-use rust_hctr2::Chctr2_128;
+use hctr2_rs::Chctr2_128;
 
-fn main() -> Result<(), rust_hctr2::Chctr2Error> {
+fn main() -> Result<(), hctr2_rs::Chctr2Error> {
     // CHCTR2 requires two keys (combined into one 32-byte key for AES-128)
     let key = [0u8; 32];  // K1 || K2
     let cipher = Chctr2_128::new(&key);
@@ -235,9 +235,9 @@ fn main() -> Result<(), rust_hctr2::Chctr2Error> {
 ### HCTR2-TwKD Encryption (Tweak-Based Key Derivation)
 
 ```rust
-use rust_hctr2::Hctr2TwKD_128;
+use hctr2_rs::Hctr2TwKD_128;
 
-fn main() -> Result<(), rust_hctr2::Hctr2TwKDError> {
+fn main() -> Result<(), hctr2_rs::Hctr2TwKDError> {
     // Master key for key derivation
     let master_key = [0u8; 16];
     let cipher = Hctr2TwKD_128::new(&master_key);
@@ -260,9 +260,9 @@ fn main() -> Result<(), rust_hctr2::Hctr2TwKDError> {
 ### Format-Preserving Encryption (Decimal)
 
 ```rust
-use rust_hctr2::Hctr2Fp_128_Decimal;
+use hctr2_rs::Hctr2Fp_128_Decimal;
 
-fn main() -> Result<(), rust_hctr2::Hctr2FpError> {
+fn main() -> Result<(), hctr2_rs::Hctr2FpError> {
     let key = [0u8; 16];
     let cipher = Hctr2Fp_128_Decimal::new(&key);
 

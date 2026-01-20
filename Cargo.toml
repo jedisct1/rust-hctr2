@@ -1,0 +1,28 @@
+[package]
+name = "hctr2-rs"
+version = "0.9.0"
+edition = "2024"
+homepage = "https://github.com/jedisct1/hctr2-rs"
+repository = "https://github.com/jedisct1/hctr2-rs"
+description = "HCTR2 and HCTR3 length-preserving encryption with format-preserving variants"
+license = "MIT OR Apache-2.0"
+keywords = ["cryptography", "encryption", "hctr2", "hctr3", "fpe", "disk-encryption"]
+categories = ["cryptography", "no-std"]
+readme = "README.md"
+
+[dependencies]
+aes = "0.9.0-rc.2"
+polyval = "0.7.0-rc.3"
+sha2 = { version = "0.11.0-rc.3", default-features = false }
+cipher = "0.5.0-rc.5"
+
+[dev-dependencies]
+ct-codecs = "1.1.6"
+
+[features]
+default = ["std"]
+std = []
+
+[profile.release]
+lto = true
+codegen-units = 1

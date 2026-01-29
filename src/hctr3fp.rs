@@ -26,7 +26,7 @@
 //! - Minimum message length depends on radix (e.g., 39 digits for decimal)
 
 #[allow(deprecated)]
-use aes::cipher::{Array, BlockCipherDecrypt, KeyInit};
+use aes::cipher::{Array, BlockCipherDecrypt};
 use aes::{Aes128, Aes256};
 use polyval::{Polyval, universal_hash::UniversalHash};
 use sha2::{Digest, Sha256};

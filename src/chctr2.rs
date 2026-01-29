@@ -18,7 +18,7 @@
 //! - Ciphertext length equals plaintext length
 
 #[allow(deprecated)]
-use aes::cipher::{Array, BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
+use aes::cipher::{Array, BlockCipherDecrypt, BlockCipherEncrypt};
 use aes::{Aes128, Aes256};
 use polyval::{Polyval, universal_hash::UniversalHash};
 

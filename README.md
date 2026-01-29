@@ -243,14 +243,16 @@ fn main() -> Result<(), hctr2_rs::Hctr2TwKDError> {
     let cipher = Hctr2TwKD_128::new(&master_key);
 
     let plaintext = b"Sector data here";
-    let tweak = b"sector-42";  // Max 14 bytes for KDF tweak
+    // Tweak must be at least 16 bytes. First 16 bytes are used for key derivation
+    // (top 2 bits of first byte must be zero). Remaining bytes go to HCTR2.
+    let tweak = [0x01u8; 16];  // 16-byte KDF tweak
     let mut ciphertext = [0u8; 16];
 
     // Each unique tweak derives a unique HCTR2 key
-    cipher.encrypt(plaintext, tweak, &mut ciphertext)?;
+    cipher.encrypt(plaintext, &tweak, &mut ciphertext)?;
 
     let mut decrypted = [0u8; 16];
-    cipher.decrypt(&ciphertext, tweak, &mut decrypted)?;
+    cipher.decrypt(&ciphertext, &tweak, &mut decrypted)?;
 
     assert_eq!(plaintext, &decrypted);
     Ok(())

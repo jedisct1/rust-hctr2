@@ -23,7 +23,7 @@
 //! ## Basic HCTR2 encryption
 //!
 //! ```rust
-//! use hctr2::Hctr2_128;
+//! use hctr2_rs::Hctr2_128;
 //!
 //! let key = [0u8; 16];
 //! let cipher = Hctr2_128::new(&key);
@@ -42,7 +42,7 @@
 //! ## Format-preserving encryption (credit card numbers)
 //!
 //! ```rust
-//! use hctr2::{Hctr2Fp_128_Decimal, encode_base_radix, first_block_length};
+//! use hctr2_rs::{Hctr2Fp_128_Decimal, encode_base_radix, first_block_length};
 //!
 //! let key = [0u8; 16];
 //! let cipher = Hctr2Fp_128_Decimal::new(&key);

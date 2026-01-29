@@ -12,6 +12,10 @@ pub enum Error {
     InputTooShort,
     /// Tweak is longer than the maximum allowed.
     TweakTooLong,
+    /// Tweak is shorter than the minimum required length.
+    TweakTooShort,
+    /// Tweak format is invalid (e.g., reserved bits are set).
+    InvalidTweak,
     /// A digit value is out of range for the radix.
     InvalidDigit,
 }
@@ -21,6 +25,8 @@ impl core::fmt::Display for Error {
         match self {
             Error::InputTooShort => write!(f, "input too short"),
             Error::TweakTooLong => write!(f, "tweak too long"),
+            Error::TweakTooShort => write!(f, "tweak too short"),
+            Error::InvalidTweak => write!(f, "invalid tweak format"),
             Error::InvalidDigit => write!(f, "digit out of range for radix"),
         }
     }

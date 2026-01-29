@@ -152,19 +152,20 @@ mod tests {
         let cipher = Hctr2TwKD_128::new(&master_key);
 
         let plaintext = b"HCTR2-TwKD test message!";
-        let tweak = b"twkd tweak";
+        // Tweak must be at least 16 bytes, with top 2 bits of first byte = 0
+        let tweak = [0x01u8; 20];
 
         let mut ciphertext = vec![0u8; plaintext.len()];
-        cipher.encrypt(plaintext, tweak, &mut ciphertext).unwrap();
+        cipher.encrypt(plaintext, &tweak, &mut ciphertext).unwrap();
 
         println!("HCTR2-TwKD-128 Basic Test:");
         println!("  Master Key: {}", hex(&master_key));
-        println!("  Tweak:      {}", hex(tweak));
+        println!("  Tweak:      {}", hex(&tweak));
         println!("  Plaintext:  {}", hex(plaintext));
         println!("  Ciphertext: {}", hex(&ciphertext));
 
         let mut decrypted = vec![0u8; plaintext.len()];
-        cipher.decrypt(&ciphertext, tweak, &mut decrypted).unwrap();
+        cipher.decrypt(&ciphertext, &tweak, &mut decrypted).unwrap();
         assert_eq!(plaintext.as_slice(), decrypted.as_slice());
     }
 
@@ -336,19 +337,20 @@ mod tests {
         let cipher = Hctr2TwKD_256::new(&master_key);
 
         let plaintext = b"HCTR2-TwKD-256 test message!";
-        let tweak = b"twkd256 tweak";
+        // Tweak must be at least 16 bytes, with top 2 bits of first byte = 0
+        let tweak = [0x02u8; 20];
 
         let mut ciphertext = vec![0u8; plaintext.len()];
-        cipher.encrypt(plaintext, tweak, &mut ciphertext).unwrap();
+        cipher.encrypt(plaintext, &tweak, &mut ciphertext).unwrap();
 
         println!("HCTR2-TwKD-256 Basic Test:");
         println!("  Master Key: {}", hex(&master_key));
-        println!("  Tweak:      {}", hex(tweak));
+        println!("  Tweak:      {}", hex(&tweak));
         println!("  Plaintext:  {}", hex(plaintext));
         println!("  Ciphertext: {}", hex(&ciphertext));
 
         let mut decrypted = vec![0u8; plaintext.len()];
-        cipher.decrypt(&ciphertext, tweak, &mut decrypted).unwrap();
+        cipher.decrypt(&ciphertext, &tweak, &mut decrypted).unwrap();
         assert_eq!(plaintext.as_slice(), decrypted.as_slice());
     }
 

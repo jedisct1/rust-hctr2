@@ -557,8 +557,12 @@ mod tests {
 
         let tweak1 = [0x05u8; 20];
         let tweak2 = [0x06u8; 20];
-        cipher.encrypt(&plaintext, &tweak1, &mut ciphertext1).unwrap();
-        cipher.encrypt(&plaintext, &tweak2, &mut ciphertext2).unwrap();
+        cipher
+            .encrypt(&plaintext, &tweak1, &mut ciphertext1)
+            .unwrap();
+        cipher
+            .encrypt(&plaintext, &tweak2, &mut ciphertext2)
+            .unwrap();
 
         assert_ne!(ciphertext1, ciphertext2);
     }

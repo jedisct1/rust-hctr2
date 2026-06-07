@@ -1,6 +1,6 @@
 # hctr2-rs
 
-Pure Rust implementation of HCTR2, HCTR3, and their beyond-birthday-bound secure variants (CHCTR2, HCTR2-TwKD), plus format-preserving variants.
+Pure Rust implementation of HCTR2, HCTR3, and their beyond-birthday-bound secure variants (CHCTR2, HCTR2-TwKD, HCTR2++), plus format-preserving variants.
 
 This is a port of [zig-hctr2](https://github.com/jedisct1/zig-hctr2).
 
@@ -69,6 +69,31 @@ Use HCTR2-TwKD when you need:
 HCTR2-TwKD derives a fresh HCTR2 key from each tweak using the CENC construction, achieving 2n/3-bit security when the number of encryptions per tweak is bounded by approximately 2^42. Cost per block is identical to HCTR2 (1 BC call + 2 field multiplications), with a small per-tweak overhead for key derivation.
 
 Reference: "Beyond-Birthday-Bound Security with HCTR2" (ASIACRYPT 2025)
+
+### HCTR2++ (Fresh Re-keying)
+
+Use HCTR2++ when you need:
+
+- Security approaching the full block size, O(2^n) with unique tweaks
+- A construction built from a plain block cipher (AES-128), no tweakable block cipher
+- An accordion-mode candidate with the strongest available security bound in this crate
+- Tolerance for a significant performance cost
+
+HCTR2++ keeps the Hash-Encrypt-Hash structure of HCTR2 but replaces every static
+block cipher call with Mennink's R3 fresh re-keying scheme and widens the universal
+hash from n to 2n bits (POLYVAL-style over GF(2^256)). Every message block uses a
+fresh, independently derived AES key, so no permutation is ever queried twice and
+internal collisions are pushed out to the 2n-bit hash. The first ciphertext block
+additionally goes through an inverse block cipher call, which makes encryption and
+decryption perfectly symmetric: decryption is the same algorithm with the two hash
+keys swapped.
+
+The cost is real: each block requires a fresh AES key schedule, one AES call and two
+GF(2^256) multiplications, so expect HCTR2++ to be several times slower than HCTR2.
+Security degrades with the number of queries sharing the same tweak, so tweaks should
+be unique or only lightly reused.
+
+Reference: "HCTR++: A Beyond Birthday Bound Secure HCTR2 Variant" (Ozturk, Kocak, Yayla, 2026)
 
 ### Format-Preserving Variants (HCTR2-FP and HCTR3-FP)
 
@@ -259,6 +284,30 @@ fn main() -> Result<(), hctr2_rs::Hctr2TwKDError> {
 }
 ```
 
+### HCTR2++ Encryption (Fresh Re-keying)
+
+```rust
+use hctr2_rs::Hctr2pp_128;
+
+fn main() -> Result<(), hctr2_rs::Error> {
+    let key = [0u8; 16];
+    let cipher = Hctr2pp_128::new(&key);
+
+    let plaintext = b"BBB-secure data!";
+    // Use unique tweaks for the full security bound
+    let tweak = b"sector-42";
+    let mut ciphertext = [0u8; 16];
+
+    cipher.encrypt(plaintext, tweak, &mut ciphertext)?;
+
+    let mut decrypted = [0u8; 16];
+    cipher.decrypt(&ciphertext, tweak, &mut decrypted)?;
+
+    assert_eq!(plaintext, &decrypted);
+    Ok(())
+}
+```
+
 ### Format-Preserving Encryption (Decimal)
 
 ```rust
@@ -327,6 +376,7 @@ Both HCTR2 and HCTR3 are designed to leverage AES-NI instructions on modern proc
 - [Length-preserving encryption with HCTR2](https://eprint.iacr.org/2021/1441) - Paul Crowley, Nathan Huckleberry, Eric Biggers (IACR ePrint Archive)
 - [HCTR3](https://csrc.nist.gov/files/pubs/sp/800/197/iprd/docs/3_samvadini.pdf) - NIST SP 800-197 Workshop presentation
 - [Beyond-Birthday-Bound Security with HCTR2](https://doi.org/10.1007/978-3-031-85848-6_1) - Chen, Y.L., et al. (ASIACRYPT 2025, LNCS 16245, pp. 3-34)
+- "HCTR++: A Beyond Birthday Bound Secure HCTR2 Variant" - Gulnihal Ozturk, Onur Kocak, Oguz Yayla (2026)
 
 ## License
 

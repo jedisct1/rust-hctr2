@@ -16,6 +16,7 @@
 //! - **HCTR3**: Enhanced security with two-key construction and LFSR-based ELK mode
 //! - **CHCTR2**: Cascaded HCTR2 with ~85-bit multi-user security
 //! - **HCTR2-TwKD**: HCTR2 with tweak-based key derivation for BBB security
+//! - **HCTR2++**: HCTR2 with R3 fresh re-keying and a 2n-bit hash for BBB security
 //! - **HCTR2-FP/HCTR3-FP**: Format-preserving variants for encrypting structured data
 //!
 //! # Quick Start
@@ -83,6 +84,7 @@ pub mod common;
 pub mod hctr2;
 pub mod hctr2_twkd;
 pub mod hctr2fp;
+pub mod hctr2pp;
 pub mod hctr3;
 pub mod hctr3fp;
 
@@ -105,6 +107,7 @@ pub use hctr2fp::{
     Hctr2Fp, Hctr2Fp_128_Base64, Hctr2Fp_128_Decimal, Hctr2Fp_128_Hex, Hctr2Fp_256_Base64,
     Hctr2Fp_256_Decimal, Hctr2Fp_256_Hex, decode_base_radix, encode_base_radix, first_block_length,
 };
+pub use hctr2pp::{Hctr2pp, Hctr2pp_128, Hctr2pp_256};
 #[allow(deprecated)]
 pub use hctr3::Hctr3Error;
 pub use hctr3::{Hctr3, Hctr3_128, Hctr3_256};

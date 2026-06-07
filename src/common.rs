@@ -18,6 +18,8 @@ pub enum Error {
     InvalidTweak,
     /// A digit value is out of range for the radix.
     InvalidDigit,
+    /// Output buffer length does not match input length.
+    OutputLengthMismatch,
 }
 
 impl core::fmt::Display for Error {
@@ -28,6 +30,7 @@ impl core::fmt::Display for Error {
             Error::TweakTooShort => write!(f, "tweak too short"),
             Error::InvalidTweak => write!(f, "invalid tweak format"),
             Error::InvalidDigit => write!(f, "digit out of range for radix"),
+            Error::OutputLengthMismatch => write!(f, "output length does not match input length"),
         }
     }
 }

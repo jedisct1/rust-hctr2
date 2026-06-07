@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 keywords = ["encryption", "hctr2", "hctr3", "fpe", "disk-encryption"]
 categories = ["cryptography", "no-std"]
 readme = "README.md"
+include = ["src/**/*.rs", "README.md", "LICENSE*"]
 
 [dependencies]
 aes = "0.9.1"

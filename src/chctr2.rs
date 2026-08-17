@@ -20,6 +20,8 @@
 #[allow(deprecated)]
 use aes::cipher::{Array, BlockCipherDecrypt, BlockCipherEncrypt};
 use aes::{Aes128, Aes256};
+#[cfg(feature = "no_std")]
+use alloc::vec::Vec;
 use polyval::{Polyval, universal_hash::UniversalHash};
 
 use crate::common::{BLOCK_LENGTH, Direction, Error, absorb, xctr, xor_blocks, xor_blocks_3};

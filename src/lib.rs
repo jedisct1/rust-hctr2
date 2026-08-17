@@ -79,6 +79,9 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "no_std")]
+extern crate alloc;
+
 pub mod chctr2;
 pub mod common;
 pub mod hctr2;

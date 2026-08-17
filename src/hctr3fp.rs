@@ -28,6 +28,10 @@
 #[allow(deprecated)]
 use aes::cipher::{Array, BlockCipherDecrypt};
 use aes::{Aes128, Aes256};
+#[cfg(feature = "no_std")]
+use alloc::vec;
+#[cfg(feature = "no_std")]
+use alloc::vec::Vec;
 use polyval::{Polyval, universal_hash::UniversalHash};
 use sha2::{Digest, Sha256};
 

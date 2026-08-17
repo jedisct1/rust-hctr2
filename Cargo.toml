@@ -23,6 +23,7 @@ ct-codecs = "1.1.7"
 [features]
 default = ["std"]
 std = []
+no_std = []
 
 [profile.release]
 lto = true

@@ -23,7 +23,9 @@ use aes::{Aes128, Aes256};
 use polyval::{Polyval, universal_hash::UniversalHash};
 use sha2::{Digest, Sha256};
 
-use crate::common::{BLOCK_LENGTH, Direction, Error, absorb, elk, xor_blocks, xor_blocks_3};
+use crate::common::{
+    BLOCK_LENGTH, Direction, Error, absorb, derive_ke, elk, xor_blocks, xor_blocks_3,
+};
 use crate::hctr2::AesCipher;
 
 // Keep the old error type as an alias for backwards compatibility
@@ -67,22 +69,7 @@ impl<Aes: AesCipher> Hctr3<Aes> {
         let ks_enc = Aes::new(Array::from_slice(key));
         let ks_dec = Aes::new_dec(key);
 
-        let ke_key: Vec<u8> = if Aes::KEY_LEN <= 16 {
-            let mut ke_block = Array::clone_from_slice(&[0u8; 16]);
-            ks_enc.encrypt_block(&mut ke_block);
-            ke_block[..Aes::KEY_LEN].to_vec()
-        } else {
-            let mut ke_block0 = Array::clone_from_slice(&[0u8; 16]);
-            let mut ke_block1 = Array::clone_from_slice(&[0x01u8; 16]);
-            ks_enc.encrypt_block(&mut ke_block0);
-            ks_enc.encrypt_block(&mut ke_block1);
-            let mut ke = vec![0u8; Aes::KEY_LEN];
-            ke[..16].copy_from_slice(ke_block0.as_slice());
-            ke[16..].copy_from_slice(&ke_block1.as_slice()[..(Aes::KEY_LEN - 16)]);
-            ke
-        };
-
-        let ke_enc = Aes::new(Array::from_slice(&ke_key));
+        let ke_enc = derive_ke(&ks_enc);
 
         let mut h_block = Array::clone_from_slice(&[0u8; 16]);
         let mut l_block = Array::clone_from_slice(&{

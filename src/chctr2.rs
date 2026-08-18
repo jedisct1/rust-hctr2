@@ -22,7 +22,9 @@ use aes::cipher::{Array, BlockCipherDecrypt, BlockCipherEncrypt};
 use aes::{Aes128, Aes256};
 use polyval::{Polyval, universal_hash::UniversalHash};
 
-use crate::common::{BLOCK_LENGTH, Direction, Error, absorb, xctr, xor_blocks, xor_blocks_3};
+use crate::common::{
+    BLOCK_LENGTH, Direction, Error, absorb, xctr, xctr_in_place, xor_blocks, xor_blocks_3,
+};
 use crate::hctr2::AesCipher;
 
 // Keep the old error type as an alias for backwards compatibility
@@ -171,7 +173,7 @@ impl<Aes: AesCipher> Chctr2<Aes> {
 
                 let iv1 = xor_blocks_3(&x1_0, &y1_0, &self.l1);
 
-                let (_, r_slice) = dst.split_at_mut(BLOCK_LENGTH);
+                let (first_block, r_slice) = dst.split_at_mut(BLOCK_LENGTH);
                 xctr(&self.ks1_enc, r_slice, m_star, &iv1);
 
                 let mut poly1 = poly1_after_tweak.clone();
@@ -190,13 +192,12 @@ impl<Aes: AesCipher> Chctr2<Aes> {
 
                 let iv2 = xor_blocks_3(&x2_0, &y2_0, &self.l2);
 
-                let c_star_src: Vec<u8> = r_slice.to_vec();
-                let (_, c_star) = dst.split_at_mut(BLOCK_LENGTH);
-                xctr(&self.ks2_enc, c_star, &c_star_src, &iv2);
+                let c_star = r_slice;
+                xctr_in_place(&self.ks2_enc, c_star, &iv2);
 
                 let mut poly2 = poly2_after_tweak;
                 let z2 = absorb(&mut poly2, c_star);
-                dst[..BLOCK_LENGTH].copy_from_slice(&xor_blocks(&y2_0, &z2));
+                first_block.copy_from_slice(&xor_blocks(&y2_0, &z2));
             }
             Direction::Decrypt => {
                 let c0: [u8; BLOCK_LENGTH] = src[..BLOCK_LENGTH].try_into().unwrap();
@@ -213,7 +214,7 @@ impl<Aes: AesCipher> Chctr2<Aes> {
 
                 let iv2 = xor_blocks_3(&x2_0, &y2_0, &self.l2);
 
-                let (_, r_slice) = dst.split_at_mut(BLOCK_LENGTH);
+                let (first_block, r_slice) = dst.split_at_mut(BLOCK_LENGTH);
                 xctr(&self.ks2_enc, r_slice, c_star, &iv2);
 
                 let mut poly1 = poly1_after_tweak.clone();
@@ -232,13 +233,12 @@ impl<Aes: AesCipher> Chctr2<Aes> {
 
                 let iv1 = xor_blocks_3(&x1_0, &y1_0, &self.l1);
 
-                let r_copy: Vec<u8> = r_slice.to_vec();
-                let (_, m_star_out) = dst.split_at_mut(BLOCK_LENGTH);
-                xctr(&self.ks1_enc, m_star_out, &r_copy, &iv1);
+                let m_star_out = r_slice;
+                xctr_in_place(&self.ks1_enc, m_star_out, &iv1);
 
                 let mut poly1 = poly1_after_tweak;
                 let z1 = absorb(&mut poly1, m_star_out);
-                dst[..BLOCK_LENGTH].copy_from_slice(&xor_blocks(&x1_0, &z1));
+                first_block.copy_from_slice(&xor_blocks(&x1_0, &z1));
             }
         }
 

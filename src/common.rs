@@ -5,6 +5,8 @@
 use aes::cipher::{Array, BlockCipherEncrypt};
 use polyval::{Polyval, universal_hash::UniversalHash};
 
+use crate::hctr2::AesCipher;
+
 /// Unified error type for all HCTR cipher operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
@@ -83,44 +85,52 @@ pub fn xctr<Aes: BlockCipherEncrypt>(
     src: &[u8],
     z: &[u8; BLOCK_LENGTH],
 ) {
-    let mut counter: u64 = 1;
-    let mut i = 0;
+    dst[..src.len()].copy_from_slice(src);
+    xctr_in_place(ks_enc, &mut dst[..src.len()], z);
+}
 
-    while i + BLOCK_LENGTH <= src.len() {
+/// XCTR mode applied in place: the keystream is XORed directly into `buf`.
+///
+/// This avoids the scratch copy that the two-argument form would need
+/// when the source and destination are the same buffer.
+pub fn xctr_in_place<Aes: BlockCipherEncrypt>(
+    ks_enc: &Aes,
+    buf: &mut [u8],
+    z: &[u8; BLOCK_LENGTH],
+) {
+    for (counter, chunk) in (1u64..).zip(buf.chunks_mut(BLOCK_LENGTH)) {
         let mut counter_bytes = [0u8; BLOCK_LENGTH];
         counter_bytes[..8].copy_from_slice(&counter.to_le_bytes());
-
-        for j in 0..BLOCK_LENGTH {
-            counter_bytes[j] ^= z[j];
-        }
+        xor_block(&mut counter_bytes, z);
 
         let mut block = Array::clone_from_slice(&counter_bytes);
         ks_enc.encrypt_block(&mut block);
 
-        for j in 0..BLOCK_LENGTH {
-            dst[i + j] = src[i + j] ^ block[j];
-        }
-
-        counter += 1;
-        i += BLOCK_LENGTH;
-    }
-
-    let left = src.len() - i;
-    if left > 0 {
-        let mut counter_bytes = [0u8; BLOCK_LENGTH];
-        counter_bytes[..8].copy_from_slice(&counter.to_le_bytes());
-
-        for j in 0..BLOCK_LENGTH {
-            counter_bytes[j] ^= z[j];
-        }
-
-        let mut block = Array::clone_from_slice(&counter_bytes);
-        ks_enc.encrypt_block(&mut block);
-
-        for j in 0..left {
-            dst[i + j] = src[i + j] ^ block[j];
+        for (b, k) in chunk.iter_mut().zip(block.iter()) {
+            *b ^= *k;
         }
     }
+}
+
+/// Derive the HCTR3 authentication key cipher (Ke) from the encryption key.
+pub(crate) fn derive_ke<Aes: AesCipher>(ks_enc: &Aes) -> Aes {
+    // The buffer is large enough for AES-256; only KEY_LEN bytes are used.
+    let mut ke_key = [0u8; 32];
+
+    let mut ke_block0 = Array::clone_from_slice(&[0u8; 16]);
+    ks_enc.encrypt_block(&mut ke_block0);
+
+    if Aes::KEY_LEN <= 16 {
+        ke_key[..Aes::KEY_LEN].copy_from_slice(&ke_block0[..Aes::KEY_LEN]);
+    } else {
+        // For AES-256, need 32 bytes - use [0x01; 16] for second block
+        let mut ke_block1 = Array::clone_from_slice(&[0x01u8; 16]);
+        ks_enc.encrypt_block(&mut ke_block1);
+        ke_key[..16].copy_from_slice(ke_block0.as_slice());
+        ke_key[16..Aes::KEY_LEN].copy_from_slice(&ke_block1[..(Aes::KEY_LEN - 16)]);
+    }
+
+    Aes::new(Array::from_slice(&ke_key[..Aes::KEY_LEN]))
 }
 
 /// LFSR next state function for 128-bit state.

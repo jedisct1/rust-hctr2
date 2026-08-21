@@ -32,7 +32,7 @@ use polyval::{Polyval, universal_hash::UniversalHash};
 use sha2::{Digest, Sha256};
 
 use crate::common::{
-    BLOCK_LENGTH, Direction, Error, absorb, lfsr_next_128, xor_block, xor_blocks_3,
+    BLOCK_LENGTH, Direction, Error, absorb, derive_ke, lfsr_next_128, xor_block, xor_blocks_3,
 };
 use crate::hctr2::AesCipher;
 use crate::hctr2fp::{
@@ -91,23 +91,7 @@ impl<Aes: AesCipher, const RADIX: u16> Hctr3Fp<Aes, RADIX> {
         let ks_enc = Aes::new(Array::from_slice(key));
         let ks_dec = Aes::new_dec(key);
 
-        // Derive Ke (authentication key)
-        let mut ke_block0 = Array::clone_from_slice(&[0u8; 16]);
-        ks_enc.encrypt_block(&mut ke_block0);
-
-        let ke_key: Vec<u8> = if Aes::KEY_LEN <= 16 {
-            ke_block0[..Aes::KEY_LEN].to_vec()
-        } else {
-            // For AES-256, need 32 bytes - use [0x01; 16] for second block
-            let mut ke_block1 = Array::clone_from_slice(&[0x01u8; 16]);
-            ks_enc.encrypt_block(&mut ke_block1);
-            let mut ke = vec![0u8; Aes::KEY_LEN];
-            ke[..16].copy_from_slice(ke_block0.as_slice());
-            ke[16..].copy_from_slice(&ke_block1[..(Aes::KEY_LEN - 16)]);
-            ke
-        };
-
-        let ke_enc = Aes::new(Array::from_slice(&ke_key));
+        let ke_enc = derive_ke(&ks_enc);
 
         let mut h_block = Array::clone_from_slice(&[0u8; 16]);
         let mut l_block = Array::clone_from_slice(&{

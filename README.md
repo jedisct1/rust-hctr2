@@ -178,7 +178,7 @@ Or from git:
 
 ```toml
 [dependencies]
-hctr2-rs = { git = "https://github.com/jedisct1/hctr2-rs" }
+hctr2-rs = { git = "https://github.com/jedisct1/rust-hctr2" }
 ```
 
 ## Usage Examples
@@ -375,7 +375,7 @@ Both HCTR2 and HCTR3 are designed to leverage AES-NI instructions on modern proc
 
 - [Length-preserving encryption with HCTR2](https://eprint.iacr.org/2021/1441) - Paul Crowley, Nathan Huckleberry, Eric Biggers (IACR ePrint Archive)
 - [HCTR3](https://csrc.nist.gov/files/pubs/sp/800/197/iprd/docs/3_samvadini.pdf) - NIST SP 800-197 Workshop presentation
-- [Beyond-Birthday-Bound Security with HCTR2](https://doi.org/10.1007/978-3-031-85848-6_1) - Chen, Y.L., et al. (ASIACRYPT 2025, LNCS 16245, pp. 3-34)
+- [Beyond-Birthday-Bound Security with HCTR2](https://doi.org/10.1007/978-981-95-5018-0_1) - Chen, Y.L., et al. (ASIACRYPT 2025, LNCS 16245, pp. 3-34)
 - "HCTR++: A Beyond Birthday Bound Secure HCTR2 Variant" - Gulnihal Ozturk, Onur Kocak, Oguz Yayla (2026)
 
 ## License

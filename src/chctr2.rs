@@ -1,21 +1,17 @@
 #![allow(deprecated)]
-//! CHCTR2 (Cascaded HCTR2) beyond-birthday-bound secure wide-block tweakable cipher.
+//! CHCTR2 (Cascaded HCTR2): a length-preserving wide-block tweakable cipher that's stronger than plain HCTR2.
 //!
-//! CHCTR2 achieves 2n/3-bit multi-user security (approximately 85 bits with 128-bit blocks)
-//! by cascading HCTR2 twice with two independent keys. This provides significantly higher
-//! security than standard HCTR2's birthday-bound (64-bit) security.
+//! It encrypts with HCTR2 under the first key, then again under the second key.
+//! From "Beyond-Birthday-Bound Security with HCTR2", ASIACRYPT 2025.
 //!
-//! Construction (from "Beyond-Birthday-Bound Security with HCTR2", ASIACRYPT 2025):
-//! - Uses two independent keys K1 and K2
-//! - CHCTR2[K1,K2](T,M) = HCTR2[K2](T, HCTR2[K1](T, M))
-//! - Optimized: middle hash layer combines H1 and H2: Z_{1,2} = H1(T,R) XOR H2(T,R)
-//! - Cost per block: 2 BC calls + 3 field multiplications
+//! The middle step XORs the hashes from both keys.
+//! Don't replace that with one hash keyed with H1 XOR H2, the result would be different.
 //!
-//! Security properties:
-//! - Beyond-birthday-bound: ~85-bit security vs HCTR2's ~64-bit
-//! - No restrictions on tweak usage
-//! - Multi-user secure
-//! - Ciphertext length equals plaintext length
+//! Each block costs 2 AES calls and 4 field multiplications.
+//!
+//! You get about 85 bits of multi-user security instead of 64, with no limits on how tweaks are used.
+//! That assumes the data is spread over many users.
+//! A single user encrypting long messages gets a bit less, around 83 bits with 4 KiB sectors.
 
 #[allow(deprecated)]
 use aes::cipher::{Array, BlockCipherDecrypt, BlockCipherEncrypt};
@@ -125,8 +121,7 @@ impl<Aes: AesCipher> Chctr2<Aes> {
         self.chctr2(ciphertext, tweak, plaintext, Direction::Decrypt)
     }
 
-    /// Optimized CHCTR2 implementation.
-    /// Structure: hash1-encrypt1-hash_{1,2}-encrypt2-hash2
+    /// Same output as calling HCTR2 twice, but each key only hashes the tweak once.
     fn chctr2(
         &self,
         src: &[u8],
@@ -267,143 +262,82 @@ impl Chctr2_256 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hctr2::Hctr2;
+    use ct_codecs::{Decoder, Hex};
 
-    #[test]
-    fn test_chctr2_128_roundtrip() {
-        let key = [0u8; 32];
-        let cipher = Chctr2_128::new(&key);
+    fn sequence(len: usize) -> Vec<u8> {
+        (0..len).map(|i| i as u8).collect()
+    }
 
-        let plaintext = b"Hello, CHCTR2 World!";
-        let mut ciphertext = vec![0u8; plaintext.len()];
-        let mut decrypted = vec![0u8; plaintext.len()];
+    fn assert_is_hctr2_twice<Aes: AesCipher>() {
+        let key = sequence(2 * Aes::KEY_LEN);
+        let (key1, key2) = key.split_at(Aes::KEY_LEN);
+        let cascade = Chctr2::<Aes>::new_split(key1, key2);
+        let first = Hctr2::<Aes>::new(key1);
+        let second = Hctr2::<Aes>::new(key2);
+        let message = sequence(1023);
 
-        let tweak = b"test tweak";
+        for tweak in [&b""[..], b"tweak", b"a tweak longer than one block"] {
+            for len in [16, 17, 32, 1023] {
+                let message = &message[..len];
+                let mut middle = vec![0u8; len];
+                let mut expected = vec![0u8; len];
+                let mut output = vec![0u8; len];
+                let mut decrypted = vec![0u8; len];
 
-        cipher.encrypt(plaintext, tweak, &mut ciphertext).unwrap();
-        cipher.decrypt(&ciphertext, tweak, &mut decrypted).unwrap();
+                first.encrypt(message, tweak, &mut middle).unwrap();
+                second.encrypt(&middle, tweak, &mut expected).unwrap();
+                cascade.encrypt(message, tweak, &mut output).unwrap();
+                assert_eq!(expected, output);
 
-        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
+                cascade.decrypt(&output, tweak, &mut decrypted).unwrap();
+                assert_eq!(message, decrypted);
+            }
+        }
     }
 
     #[test]
-    fn test_chctr2_128_roundtrip_nonzero_key() {
-        let key: [u8; 32] = core::array::from_fn(|i| (i + 1) as u8);
-        let cipher = Chctr2_128::new(&key);
+    fn test_chctr2_is_hctr2_applied_twice() {
+        assert_is_hctr2_twice::<Aes128>();
+        assert_is_hctr2_twice::<Aes256>();
+    }
 
-        let plaintext = b"Hello, CHCTR2 World!";
-        let mut ciphertext = vec![0u8; plaintext.len()];
-        let mut decrypted = vec![0u8; plaintext.len()];
-
-        let tweak = b"test tweak";
-
-        cipher.encrypt(plaintext, tweak, &mut ciphertext).unwrap();
-        assert_ne!(plaintext.as_slice(), ciphertext.as_slice());
-
-        cipher.decrypt(&ciphertext, tweak, &mut decrypted).unwrap();
-        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
+    fn assert_ciphertext<Aes: AesCipher>(cipher: &Chctr2<Aes>, tweak: &[u8], hex: &str) {
+        let expected = Hex::decode_to_vec(hex, None).unwrap();
+        let mut output = vec![0u8; expected.len()];
+        cipher
+            .encrypt(&sequence(expected.len()), tweak, &mut output)
+            .unwrap();
+        assert_eq!(expected, output);
     }
 
     #[test]
-    fn test_chctr2_128_minimum_length() {
-        let key = [0u8; 32];
-        let cipher = Chctr2_128::new(&key);
+    fn test_chctr2_known_answers() {
+        // Expected values were computed independently from the paper.
+        let cipher128 = Chctr2_128::new(&sequence(32).try_into().unwrap());
+        let cipher256 = Chctr2_256::new(&sequence(64).try_into().unwrap());
 
-        let plaintext = [0x42u8; 16];
-        let mut ciphertext = [0u8; 16];
-        let mut decrypted = [0u8; 16];
-
-        cipher.encrypt(&plaintext, b"", &mut ciphertext).unwrap();
-        cipher.decrypt(&ciphertext, b"", &mut decrypted).unwrap();
-
-        assert_eq!(plaintext, decrypted);
-    }
-
-    #[test]
-    fn test_chctr2_128_input_too_short() {
-        let key = [0u8; 32];
-        let cipher = Chctr2_128::new(&key);
-
-        let plaintext = [0x42u8; 15];
-        let mut ciphertext = [0u8; 15];
-
-        assert_eq!(
-            cipher.encrypt(&plaintext, b"", &mut ciphertext),
-            Err(Error::InputTooShort)
+        assert_ciphertext(&cipher128, b"", "2f4e9b98ee561c3cdc589fec85032854");
+        assert_ciphertext(
+            &cipher128,
+            b"tweak",
+            "17bf924f79cf31d420d8989babe6f01562f05365cde3afeffd7f7f52075ec66332",
+        );
+        assert_ciphertext(
+            &cipher256,
+            b"tweak 256",
+            "dea1f0fa322fd77c2219064ed27d585b2f21f302b85b85218586830825b08c5ae19ab21ac04108daf97850f0d294c307f8ab5f2bb48a88877750531b1261940380",
         );
     }
 
     #[test]
-    fn test_chctr2_128_different_tweaks() {
-        let key = [0u8; 32];
-        let cipher = Chctr2_128::new(&key);
+    fn test_chctr2_rejects_short_input() {
+        let cipher = Chctr2_128::new(&[0u8; 32]);
+        let mut output = [0u8; 15];
 
-        let plaintext = [0x42u8; 32];
-        let mut ciphertext1 = [0u8; 32];
-        let mut ciphertext2 = [0u8; 32];
-
-        cipher
-            .encrypt(&plaintext, b"tweak1", &mut ciphertext1)
-            .unwrap();
-        cipher
-            .encrypt(&plaintext, b"tweak2", &mut ciphertext2)
-            .unwrap();
-
-        assert_ne!(ciphertext1, ciphertext2);
-    }
-
-    #[test]
-    fn test_chctr2_128_split_init() {
-        let key1 = [0x01u8; 16];
-        let key2 = [0x02u8; 16];
-        let cipher = Chctr2_128::new_split(&key1, &key2);
-
-        let plaintext = b"Test split key init";
-        let mut ciphertext = vec![0u8; plaintext.len()];
-        let mut decrypted = vec![0u8; plaintext.len()];
-
-        cipher
-            .encrypt(plaintext, b"tweak", &mut ciphertext)
-            .unwrap();
-        cipher
-            .decrypt(&ciphertext, b"tweak", &mut decrypted)
-            .unwrap();
-
-        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
-    }
-
-    #[test]
-    fn test_chctr2_128_large_message() {
-        let key = [0u8; 32];
-        let cipher = Chctr2_128::new(&key);
-
-        let plaintext = [0xABu8; 1024];
-        let mut ciphertext = [0u8; 1024];
-        let mut decrypted = [0u8; 1024];
-
-        cipher
-            .encrypt(&plaintext, b"large tweak", &mut ciphertext)
-            .unwrap();
-        cipher
-            .decrypt(&ciphertext, b"large tweak", &mut decrypted)
-            .unwrap();
-
-        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
-    }
-
-    #[test]
-    fn test_chctr2_256_roundtrip() {
-        let key = [0u8; 64];
-        let cipher = Chctr2_256::new(&key);
-
-        let plaintext = b"Hello, CHCTR2-256 World!";
-        let mut ciphertext = vec![0u8; plaintext.len()];
-        let mut decrypted = vec![0u8; plaintext.len()];
-
-        let tweak = b"test tweak 256";
-
-        cipher.encrypt(plaintext, tweak, &mut ciphertext).unwrap();
-        cipher.decrypt(&ciphertext, tweak, &mut decrypted).unwrap();
-
-        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
+        assert_eq!(
+            cipher.encrypt(&[0x42u8; 15], b"", &mut output),
+            Err(Error::InputTooShort)
+        );
     }
 }

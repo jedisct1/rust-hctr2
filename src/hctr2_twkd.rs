@@ -1,20 +1,14 @@
 #![allow(deprecated)]
-//! HCTR2-TwKD (HCTR2 with Tweak-Based Key Derivation) beyond-birthday-bound secure cipher.
+//! HCTR2-TwKD: a length-preserving wide-block tweakable cipher that derives its HCTR2 key from the tweak.
 //!
-//! HCTR2-TwKD achieves 2n/3-bit multi-user security (approximately 85 bits with 128-bit blocks)
-//! when the number of BC calls per tweak is bounded by 2^(n/3).
+//! The first part of the tweak, T0, picks the HCTR2 key through a KDF.
+//! The rest, T*, goes to a regular HCTR2.
+//! From "Beyond-Birthday-Bound Security with HCTR2", ASIACRYPT 2025.
 //!
-//! Construction (from "Beyond-Birthday-Bound Security with HCTR2", ASIACRYPT 2025):
-//! - Uses a KDF F to derive HCTR2's key from the tweak
-//! - HCTR2-TwKD[F_L, E, H](T, M) = HCTR2[E_{F_L(T_0)}, H](T_*, M)
-//! - Cost per block: 1 BC call + 2 field multiplications (same as HCTR2)
-//! - Small overhead for key derivation per unique tweak
+//! Each block costs the same as HCTR2, plus one key derivation per message.
 //!
-//! Security properties:
-//! - Beyond-birthday-bound: ~85-bit security when tweak repetition <= 2^(n/3)
-//! - Multi-user secure
-//! - Ciphertext length equals plaintext length
-//! - Maintains backward compatibility with HCTR2 implementations
+//! You get about 85 bits of multi-user security as long as each user processes at most about 2^42 blocks with the same T0.
+//! Tweak blocks and decryption count too.
 
 #[allow(deprecated)]
 use aes::cipher::{Array, BlockCipherEncrypt, KeyInit};
@@ -28,13 +22,16 @@ use crate::hctr2::{Hctr2_128, Hctr2_256};
 #[deprecated(note = "Use common::Error instead")]
 pub type Hctr2TwKDError = Error;
 
-/// CENC-based Key Derivation Function for AES-128.
+/// CENC key derivation for AES-128.
 ///
-/// Derives an AES key from a master key and a 126-bit tweak using the CENC construction:
+/// Turns a master key and a 126-bit tweak T into an AES-128 key:
 /// K = E_L(00||T) XOR E_L(01||T)
 ///
-/// The 126-bit tweak T is encoded as 16 bytes with the top two bits of the first
-/// byte set to zero. The 2-bit prefix (00/01/10) occupies those top bits.
+/// The paper only defines the AES-256 version.
+/// This one is our own: same idea, with AES-128 and only the first half of the formula.
+///
+/// T is stored in 16 bytes, and the top two bits of the first byte must be zero.
+/// Those two bits are where the 00/01/10 prefix goes.
 pub struct CencKdf128 {
     ks: Aes128,
 }
@@ -95,13 +92,13 @@ impl CencKdf128 {
     }
 }
 
-/// CENC-based Key Derivation Function for AES-256.
+/// CENC key derivation for AES-256.
 ///
-/// Derives an AES-256 key from a master key and a 126-bit tweak using the CENC construction:
+/// Turns a master key and a 126-bit tweak T into an AES-256 key:
 /// K = (E_L(00||T) XOR E_L(01||T)) || (E_L(00||T) XOR E_L(10||T))
 ///
-/// The 126-bit tweak T is encoded as 16 bytes with the top two bits of the first
-/// byte set to zero. The 2-bit prefix (00/01/10) occupies those top bits.
+/// T is stored in 16 bytes, and the top two bits of the first byte must be zero.
+/// Those two bits are where the 00/01/10 prefix goes.
 pub struct CencKdf256 {
     ks: Aes256,
 }
@@ -173,6 +170,9 @@ impl CencKdf256 {
 }
 
 /// HCTR2-TwKD with AES-128 and CENC KDF.
+///
+/// Every new T0 is one more AES-128 key an attacker can go after.
+/// Use the AES-256 version if you expect more than about 2^43 different T0 values.
 #[allow(non_camel_case_types)]
 pub struct Hctr2TwKD_128 {
     kdf: CencKdf128,
@@ -185,7 +185,7 @@ impl Hctr2TwKD_128 {
     /// AES block length in bytes (always 16).
     pub const BLOCK_LENGTH: usize = BLOCK_LENGTH;
 
-    /// Fixed tweak length for key derivation (T0 in the paper).
+    /// How many bytes at the start of the tweak go to the KDF.
     pub const KDF_TWEAK_LENGTH: usize = CencKdf128::TWEAK_LENGTH;
 
     /// Minimum input length in bytes.
@@ -198,15 +198,13 @@ impl Hctr2TwKD_128 {
         }
     }
 
-    /// Encrypt plaintext to ciphertext using HCTR2-TwKD.
+    /// Encrypts `plaintext` with `tweak` into `ciphertext`.
     ///
-    /// The tweak is partitioned into:
-    /// - T0: first `KDF_TWEAK_LENGTH` bytes (used for key derivation)
-    /// - T*: remaining bytes (passed to underlying HCTR2)
+    /// The first `KDF_TWEAK_LENGTH` bytes of the tweak are T0, which picks the key.
+    /// The rest is T*, which goes to HCTR2.
     ///
-    /// Each unique T0 derives a unique HCTR2 key, providing beyond-birthday-bound
-    /// security when the same T0 is not reused excessively (limit: ~2^42 encryptions
-    /// per tweak for AES).
+    /// For the full security, keep it to about 2^42 blocks per T0.
+    /// Changing only T* does not help, because it does not affect the key.
     pub fn encrypt(
         &self,
         plaintext: &[u8],
@@ -316,7 +314,7 @@ impl Hctr2TwKD_256 {
     /// AES block length in bytes (always 16).
     pub const BLOCK_LENGTH: usize = BLOCK_LENGTH;
 
-    /// Fixed tweak length for key derivation (T0 in the paper).
+    /// How many bytes at the start of the tweak go to the KDF.
     pub const KDF_TWEAK_LENGTH: usize = CencKdf256::TWEAK_LENGTH;
 
     /// Minimum input length in bytes.
@@ -329,11 +327,13 @@ impl Hctr2TwKD_256 {
         }
     }
 
-    /// Encrypt plaintext to ciphertext using HCTR2-TwKD.
+    /// Encrypts `plaintext` with `tweak` into `ciphertext`.
     ///
-    /// The tweak is partitioned into:
-    /// - T0: first `KDF_TWEAK_LENGTH` bytes (used for key derivation)
-    /// - T*: remaining bytes (passed to underlying HCTR2)
+    /// The first `KDF_TWEAK_LENGTH` bytes of the tweak are T0, which picks the key.
+    /// The rest is T*, which goes to HCTR2.
+    ///
+    /// For the full security, keep it to about 2^42 blocks per T0.
+    /// Changing only T* does not help, because it does not affect the key.
     pub fn encrypt(
         &self,
         plaintext: &[u8],
@@ -432,232 +432,85 @@ impl Hctr2TwKD_256 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ct_codecs::{Decoder, Hex};
 
-    #[test]
-    fn test_hctr2_twkd_128_roundtrip() {
-        let key = [0u8; 16];
-        let cipher = Hctr2TwKD_128::new(&key);
+    fn sequence(len: usize) -> Vec<u8> {
+        (0..len).map(|i| i as u8).collect()
+    }
 
-        let plaintext = b"Hello, HCTR2-TwKD!";
-        let mut ciphertext = vec![0u8; plaintext.len()];
-        let mut decrypted = vec![0u8; plaintext.len()];
+    macro_rules! assert_ciphertext {
+        ($cipher:expr, $tweak:expr, $hex:expr) => {{
+            let tweak: &[u8] = $tweak;
+            let (t0, t_star) = tweak.split_at(16);
+            let expected = Hex::decode_to_vec($hex, None).unwrap();
+            let message = sequence(expected.len());
+            let mut output = vec![0u8; expected.len()];
 
-        let tweak = [0x01u8; 20];
+            $cipher.encrypt(&message, tweak, &mut output).unwrap();
+            assert_eq!(expected, output);
+            $cipher.decrypt(&expected, tweak, &mut output).unwrap();
+            assert_eq!(message, output);
 
-        cipher.encrypt(plaintext, &tweak, &mut ciphertext).unwrap();
-        cipher.decrypt(&ciphertext, &tweak, &mut decrypted).unwrap();
-
-        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
+            $cipher
+                .encrypt_split(&message, t0, t_star, &mut output)
+                .unwrap();
+            assert_eq!(expected, output);
+            $cipher
+                .decrypt_split(&expected, t0, t_star, &mut output)
+                .unwrap();
+            assert_eq!(message, output);
+        }};
     }
 
     #[test]
-    fn test_hctr2_twkd_128_roundtrip_nonzero_key() {
-        let key: [u8; 16] = core::array::from_fn(|i| (i + 1) as u8);
-        let cipher = Hctr2TwKD_128::new(&key);
+    fn test_hctr2_twkd_known_answers() {
+        // Expected values were computed independently from the paper.
+        let cipher128 = Hctr2TwKD_128::new(&sequence(16).try_into().unwrap());
+        let cipher256 = Hctr2TwKD_256::new(&sequence(32).try_into().unwrap());
 
-        let plaintext = b"Hello, HCTR2-TwKD!";
-        let mut ciphertext = vec![0u8; plaintext.len()];
-        let mut decrypted = vec![0u8; plaintext.len()];
+        let mut tweak128 = sequence(20);
+        tweak128[0] = 0x3f;
+        let mut tweak256 = [sequence(16), b"tail".to_vec()].concat();
+        tweak256[0] = 0x2a;
 
-        let tweak = [0x01u8; 20];
-
-        cipher.encrypt(plaintext, &tweak, &mut ciphertext).unwrap();
-        assert_ne!(plaintext.as_slice(), ciphertext.as_slice());
-
-        cipher.decrypt(&ciphertext, &tweak, &mut decrypted).unwrap();
-        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
+        assert_ciphertext!(cipher128, &sequence(16), "69549f31b5a2e330c55a60989743ba99");
+        assert_ciphertext!(
+            cipher128,
+            &tweak128,
+            "510ef09ca748a7405eaaad65d1e6cf90d0ab39236a40034bc0c4feb4cc611ede17"
+        );
+        assert_ciphertext!(cipher256, &sequence(16), "c397e7293e00d50bcaaec448b0c247a1");
+        assert_ciphertext!(
+            cipher256,
+            &tweak256,
+            "4c8bfd522e0a059151ec81b8f341d2d9801446375cb59b25a195c1c55298c9e7b7e709538c33e9586b52f0fdbfa986b436148dc68c1017d2529627f684fbf9b5a3"
+        );
     }
 
     #[test]
-    fn test_hctr2_twkd_128_minimum_length() {
-        let key = [0u8; 16];
-        let cipher = Hctr2TwKD_128::new(&key);
-
-        let plaintext = [0x42u8; 16];
-        let mut ciphertext = [0u8; 16];
-        let mut decrypted = [0u8; 16];
-        let tweak = [0x03u8; 16];
-
-        cipher.encrypt(&plaintext, &tweak, &mut ciphertext).unwrap();
-        cipher.decrypt(&ciphertext, &tweak, &mut decrypted).unwrap();
-
-        assert_eq!(plaintext, decrypted);
-    }
-
-    #[test]
-    fn test_hctr2_twkd_128_input_too_short() {
-        let key = [0u8; 16];
-        let cipher = Hctr2TwKD_128::new(&key);
-
-        let plaintext = [0x42u8; 15];
-        let mut ciphertext = [0u8; 15];
-        let tweak = [0x04u8; 16];
+    fn test_hctr2_twkd_rejects_bad_input_and_tweaks() {
+        let cipher = Hctr2TwKD_128::new(&[0u8; 16]);
+        let input = [0x42u8; 16];
+        let tweak = [0u8; 17];
+        let mut output = [0u8; 16];
+        let mut bad_tweak = tweak;
+        bad_tweak[0] = 0xc0;
 
         assert_eq!(
-            cipher.encrypt(&plaintext, &tweak, &mut ciphertext),
+            cipher.encrypt(&input[..15], &tweak[..16], &mut output[..15]),
             Err(Error::InputTooShort)
         );
-    }
-
-    #[test]
-    fn test_hctr2_twkd_128_tweak_too_short() {
-        let key = [0u8; 16];
-        let cipher = Hctr2TwKD_128::new(&key);
-
-        let plaintext = [0x42u8; 16];
-        let mut ciphertext = [0u8; 16];
-
-        let short_tweak = [0u8; 8];
         assert_eq!(
-            cipher.encrypt(&plaintext, &short_tweak, &mut ciphertext),
+            cipher.encrypt(&input, &tweak[..8], &mut output),
             Err(Error::TweakTooShort)
         );
-    }
-
-    #[test]
-    fn test_hctr2_twkd_128_invalid_kdf_tweak_bits() {
-        let key = [0u8; 16];
-        let cipher = Hctr2TwKD_128::new(&key);
-
-        let plaintext = [0x42u8; 16];
-        let mut ciphertext = [0u8; 16];
-
-        // Top two bits must be zero for CENC
-        let mut bad_tweak = [0u8; 16];
-        bad_tweak[0] = 0xC0;
         assert_eq!(
-            cipher.encrypt(&plaintext, &bad_tweak, &mut ciphertext),
-            Err(Error::InvalidTweak)
-        );
-    }
-
-    #[test]
-    fn test_hctr2_twkd_128_split_tweak_too_long() {
-        let key = [0u8; 16];
-        let cipher = Hctr2TwKD_128::new(&key);
-
-        let plaintext = b"split tweak length";
-        let mut ciphertext = vec![0u8; plaintext.len()];
-
-        let kdf_tweak = [0x01u8; 17];
-        assert_eq!(
-            cipher.encrypt_split(plaintext, &kdf_tweak, b"hctr2", &mut ciphertext),
+            cipher.encrypt_split(&input, &tweak, b"", &mut output),
             Err(Error::TweakTooLong)
         );
-    }
-
-    #[test]
-    fn test_hctr2_twkd_128_different_tweaks() {
-        let key = [0u8; 16];
-        let cipher = Hctr2TwKD_128::new(&key);
-
-        let plaintext = [0x42u8; 32];
-        let mut ciphertext1 = [0u8; 32];
-        let mut ciphertext2 = [0u8; 32];
-
-        let tweak1 = [0x05u8; 20];
-        let tweak2 = [0x06u8; 20];
-        cipher
-            .encrypt(&plaintext, &tweak1, &mut ciphertext1)
-            .unwrap();
-        cipher
-            .encrypt(&plaintext, &tweak2, &mut ciphertext2)
-            .unwrap();
-
-        assert_ne!(ciphertext1, ciphertext2);
-    }
-
-    #[test]
-    fn test_hctr2_twkd_128_split_tweak() {
-        let key = [0u8; 16];
-        let cipher = Hctr2TwKD_128::new(&key);
-
-        let plaintext = b"Test split tweak mode";
-        let mut ciphertext = vec![0u8; plaintext.len()];
-        let mut decrypted = vec![0u8; plaintext.len()];
-
-        let kdf_tweak = [0x07u8; 16];
-        let hctr2_tweak = b"hctr2 part - can be any length";
-
-        cipher
-            .encrypt_split(plaintext, &kdf_tweak, hctr2_tweak, &mut ciphertext)
-            .unwrap();
-        cipher
-            .decrypt_split(&ciphertext, &kdf_tweak, hctr2_tweak, &mut decrypted)
-            .unwrap();
-
-        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
-    }
-
-    #[test]
-    fn test_hctr2_twkd_128_large_message() {
-        let key = [0u8; 16];
-        let cipher = Hctr2TwKD_128::new(&key);
-
-        let plaintext = [0xABu8; 1024];
-        let mut ciphertext = [0u8; 1024];
-        let mut decrypted = [0u8; 1024];
-        let tweak = [0x08u8; 16];
-
-        cipher.encrypt(&plaintext, &tweak, &mut ciphertext).unwrap();
-        cipher.decrypt(&ciphertext, &tweak, &mut decrypted).unwrap();
-
-        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
-    }
-
-    #[test]
-    fn test_hctr2_twkd_256_roundtrip() {
-        let key = [0u8; 32];
-        let cipher = Hctr2TwKD_256::new(&key);
-
-        let plaintext = b"Hello, HCTR2-TwKD-256!";
-        let mut ciphertext = vec![0u8; plaintext.len()];
-        let mut decrypted = vec![0u8; plaintext.len()];
-
-        let tweak = [0x02u8; 20];
-
-        cipher.encrypt(plaintext, &tweak, &mut ciphertext).unwrap();
-        cipher.decrypt(&ciphertext, &tweak, &mut decrypted).unwrap();
-
-        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
-    }
-
-    #[test]
-    fn test_cenc_kdf_128_different_tweaks() {
-        let master_key = [0u8; 16];
-        let kdf = CencKdf128::new(&master_key);
-
-        let tweak1 = [0x01u8; 16];
-        let tweak2 = [0x02u8; 16];
-        let key1 = kdf.derive_key(&tweak1);
-        let key2 = kdf.derive_key(&tweak2);
-
-        assert_ne!(key1, key2);
-    }
-
-    #[test]
-    fn test_cenc_kdf_128_deterministic() {
-        let master_key = [0u8; 16];
-        let kdf = CencKdf128::new(&master_key);
-
-        let tweak = [0x03u8; 16];
-        let key1 = kdf.derive_key(&tweak);
-        let key2 = kdf.derive_key(&tweak);
-
-        assert_eq!(key1, key2);
-    }
-
-    #[test]
-    fn test_cenc_kdf_256_key_derivation() {
-        let master_key = [0u8; 32];
-        let kdf = CencKdf256::new(&master_key);
-
-        let tweak = [0x04u8; 16];
-        let key = kdf.derive_key(&tweak);
-        assert_eq!(key.len(), 32);
-
-        let tweak2 = [0x05u8; 16];
-        let key2 = kdf.derive_key(&tweak2);
-        assert_ne!(key, key2);
+        assert_eq!(
+            cipher.encrypt(&input, &bad_tweak, &mut output),
+            Err(Error::InvalidTweak)
+        );
     }
 }

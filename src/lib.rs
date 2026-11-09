@@ -77,7 +77,7 @@
 //! - `std` (default): Enable standard library support
 //! - When disabled, the crate is `no_std` compatible
 
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(any(feature = "std", test)), no_std)]
 
 pub mod chctr2;
 pub mod common;

@@ -175,13 +175,13 @@ You can create custom radix variants using the generic `Hctr2Fp` and `Hctr3Fp` t
 use hctr2_rs::Hctr2Fp;
 
 // Base-36 for case-insensitive alphanumeric identifiers
-type Cipher36 = Hctr2Fp<16, 36>;  // AES-128, radix 36
+type Cipher36 = Hctr2Fp<aes::Aes128, 36>;  // AES-128, radix 36
 
 // Base-58 for cryptocurrency-style addresses
-type Cipher58 = Hctr2Fp<32, 58>;  // AES-256, radix 58
+type Cipher58 = Hctr2Fp<aes::Aes256, 58>;  // AES-256, radix 58
 
 // Base-62 for compact URL shorteners
-type Cipher62 = Hctr2Fp<16, 62>;  // AES-128, radix 62
+type Cipher62 = Hctr2Fp<aes::Aes128, 62>;  // AES-128, radix 62
 ```
 
 ## Installation
@@ -336,14 +336,13 @@ fn main() -> Result<(), hctr2_rs::Hctr2FpError> {
     let key = [0u8; 16];
     let cipher = Hctr2Fp_128_Decimal::new(&key);
 
-    // Encrypt a credit card number (all digits remain digits)
-    // Min 39 digits for decimal
-    let plaintext = b"123456789012345678901234567890123456789";
+    // Encrypt at least 39 decimal digits, represented as values 0–9, not ASCII.
+    let plaintext = &[1u8; 39];
     let tweak = b"user-cc-field";
     let mut ciphertext = [0u8; 39];
 
     cipher.encrypt(plaintext, tweak, &mut ciphertext)?;
-    // ciphertext contains only decimal digits
+    // ciphertext contains only digit values 0–9, not ASCII.
 
     let mut decrypted = [0u8; 39];
     cipher.decrypt(&ciphertext, tweak, &mut decrypted)?;

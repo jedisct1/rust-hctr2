@@ -1,9 +1,9 @@
 [package]
 name = "hctr2-rs"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2024"
-homepage = "https://github.com/jedisct1/hctr2-rs"
-repository = "https://github.com/jedisct1/hctr2-rs"
+homepage = "https://github.com/jedisct1/rust-hctr2"
+repository = "https://github.com/jedisct1/rust-hctr2"
 description = "HCTR2 and HCTR3 wide-block encryption in pure Rust, with length-preserving and format-preserving modes for disk sectors and filenames"
 license = "MIT OR Apache-2.0"
 keywords = ["encryption", "hctr2", "hctr3", "fpe", "disk-encryption"]
@@ -12,13 +12,13 @@ readme = "README.md"
 include = ["src/**/*.rs", "README.md", "LICENSE*"]
 
 [dependencies]
-aes = "0.9.3"
+aes = "0.9.4"
 polyval = "0.7.3"
-sha2 = { version = "0.11.0", default-features = false }
+sha2 = { version = "0.11.1", default-features = false }
 cipher = "0.5.2"
 
 [dev-dependencies]
-ct-codecs = "1.1.7"
+ct-codecs = "1.1.8"
 
 [features]
 default = ["std"]

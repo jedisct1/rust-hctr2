@@ -9,6 +9,7 @@
 //!
 //! You get about 85 bits of multi-user security as long as each user processes at most about 2^42 blocks with the same T0.
 //! Tweak blocks and decryption count too.
+//! Changing only T* does not help, because it does not affect the key.
 
 #[allow(deprecated)]
 use aes::cipher::{Array, BlockCipherEncrypt, KeyInit};
@@ -28,7 +29,7 @@ pub type Hctr2TwKDError = Error;
 /// K = E_L(00||T) XOR E_L(01||T)
 ///
 /// The paper only defines the AES-256 version.
-/// This one is our own: same idea, with AES-128 and only the first half of the formula.
+/// This one is our own: same idea, using AES-128 and deriving 16 bytes instead of 32.
 ///
 /// T is stored in 16 bytes, and the top two bits of the first byte must be zero.
 /// Those two bits are where the 00/01/10 prefix goes.
@@ -202,9 +203,6 @@ impl Hctr2TwKD_128 {
     ///
     /// The first `KDF_TWEAK_LENGTH` bytes of the tweak are T0, which picks the key.
     /// The rest is T*, which goes to HCTR2.
-    ///
-    /// For the full security, keep it to about 2^42 blocks per T0.
-    /// Changing only T* does not help, because it does not affect the key.
     pub fn encrypt(
         &self,
         plaintext: &[u8],
@@ -331,9 +329,6 @@ impl Hctr2TwKD_256 {
     ///
     /// The first `KDF_TWEAK_LENGTH` bytes of the tweak are T0, which picks the key.
     /// The rest is T*, which goes to HCTR2.
-    ///
-    /// For the full security, keep it to about 2^42 blocks per T0.
-    /// Changing only T* does not help, because it does not affect the key.
     pub fn encrypt(
         &self,
         plaintext: &[u8],
@@ -464,9 +459,9 @@ mod tests {
 
     #[test]
     fn test_hctr2_twkd_known_answers() {
-        // Expected values were computed independently from the paper.
-        let cipher128 = Hctr2TwKD_128::new(&sequence(16).try_into().unwrap());
-        let cipher256 = Hctr2TwKD_256::new(&sequence(32).try_into().unwrap());
+        // Expected values were computed separately, following the paper.
+        let cipher128 = Hctr2TwKD_128::new(&core::array::from_fn(|i| i as u8));
+        let cipher256 = Hctr2TwKD_256::new(&core::array::from_fn(|i| i as u8));
 
         let mut tweak128 = sequence(20);
         tweak128[0] = 0x3f;

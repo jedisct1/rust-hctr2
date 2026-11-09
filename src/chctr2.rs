@@ -4,9 +4,6 @@
 //! It encrypts with HCTR2 under the first key, then again under the second key.
 //! From "Beyond-Birthday-Bound Security with HCTR2", ASIACRYPT 2025.
 //!
-//! The middle step XORs the hashes from both keys.
-//! Don't replace that with one hash keyed with H1 XOR H2, the result would be different.
-//!
 //! Each block costs 2 AES calls and 4 field multiplications.
 //!
 //! You get about 85 bits of multi-user security instead of 64, with no limits on how tweaks are used.
@@ -122,6 +119,9 @@ impl<Aes: AesCipher> Chctr2<Aes> {
     }
 
     /// Same output as calling HCTR2 twice, but each key only hashes the tweak once.
+    ///
+    /// The middle step XORs the hashes from both keys.
+    /// Don't replace that with one hash keyed with H1 XOR H2, the result would be different.
     fn chctr2(
         &self,
         src: &[u8],
@@ -270,28 +270,26 @@ mod tests {
     }
 
     fn assert_is_hctr2_twice<Aes: AesCipher>() {
-        let key = sequence(2 * Aes::KEY_LEN);
-        let (key1, key2) = key.split_at(Aes::KEY_LEN);
+        let key = sequence(Chctr2::<Aes>::KEY_LENGTH);
+        let (key1, key2) = key.split_at(Chctr2::<Aes>::SINGLE_KEY_LENGTH);
         let cascade = Chctr2::<Aes>::new_split(key1, key2);
         let first = Hctr2::<Aes>::new(key1);
         let second = Hctr2::<Aes>::new(key2);
-        let message = sequence(1023);
 
         for tweak in [&b""[..], b"tweak", b"a tweak longer than one block"] {
             for len in [16, 17, 32, 1023] {
-                let message = &message[..len];
+                let message = sequence(len);
                 let mut middle = vec![0u8; len];
                 let mut expected = vec![0u8; len];
                 let mut output = vec![0u8; len];
-                let mut decrypted = vec![0u8; len];
 
-                first.encrypt(message, tweak, &mut middle).unwrap();
+                first.encrypt(&message, tweak, &mut middle).unwrap();
                 second.encrypt(&middle, tweak, &mut expected).unwrap();
-                cascade.encrypt(message, tweak, &mut output).unwrap();
+                cascade.encrypt(&message, tweak, &mut output).unwrap();
                 assert_eq!(expected, output);
 
-                cascade.decrypt(&output, tweak, &mut decrypted).unwrap();
-                assert_eq!(message, decrypted);
+                cascade.decrypt(&expected, tweak, &mut output).unwrap();
+                assert_eq!(message, output);
             }
         }
     }
@@ -313,9 +311,9 @@ mod tests {
 
     #[test]
     fn test_chctr2_known_answers() {
-        // Expected values were computed independently from the paper.
-        let cipher128 = Chctr2_128::new(&sequence(32).try_into().unwrap());
-        let cipher256 = Chctr2_256::new(&sequence(64).try_into().unwrap());
+        // Expected values were computed separately, following the paper.
+        let cipher128 = Chctr2_128::new(&core::array::from_fn(|i| i as u8));
+        let cipher256 = Chctr2_256::new(&core::array::from_fn(|i| i as u8));
 
         assert_ciphertext(&cipher128, b"", "2f4e9b98ee561c3cdc589fec85032854");
         assert_ciphertext(

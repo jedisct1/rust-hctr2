@@ -68,21 +68,21 @@ Use HCTR2-TwKD when you need:
 
 - Beyond-birthday-bound security with minimal overhead
 - Same performance as standard HCTR2
-- Tweak-based key derivation (each unique T0 derives a unique key)
+- Tweak-based key derivation (the HCTR2 key comes from T0)
 - Applications where the same T0 is not reused excessively
 
 HCTR2-TwKD uses the first 16 bytes of the tweak (T0) to derive a fresh HCTR2 key with CENC.
 The top two bits of the first byte must be zero.
 The rest of the tweak (T*) goes to HCTR2.
 
-You get about 85 bits of security as long as no more than about 2^42 blocks use the same T0.
+You get about 85 bits of security as long as each user processes at most about 2^42 blocks with the same T0.
 Tweak blocks and decryption count too.
 Changing only T* does not help, because it does not affect the key.
 
 Each block costs the same as HCTR2, plus one key derivation per message.
 
 The paper only defines the KDF for AES-256.
-The AES-128 version is our own: same idea, with AES-128 and only the first half of the formula.
+The AES-128 version is our own: same idea, using AES-128 and deriving 16 bytes instead of 32.
 
 Every new T0 is one more AES-128 key an attacker can go after.
 Use AES-256 if you expect more than about 2^43 different T0 values.
@@ -292,7 +292,7 @@ fn main() -> Result<(), hctr2_rs::Hctr2TwKDError> {
     let tweak = [0x01u8; 16];  // 16-byte KDF tweak
     let mut ciphertext = [0u8; 16];
 
-    // Each unique tweak derives a unique HCTR2 key
+    // The 16-byte tweak picks the HCTR2 key
     cipher.encrypt(plaintext, &tweak, &mut ciphertext)?;
 
     let mut decrypted = [0u8; 16];

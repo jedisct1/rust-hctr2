@@ -1,6 +1,6 @@
 [package]
 name = "hctr2-rs"
-version = "0.11.0"
+version = "0.11.1"
 edition = "2024"
 homepage = "https://github.com/jedisct1/rust-hctr2"
 repository = "https://github.com/jedisct1/rust-hctr2"

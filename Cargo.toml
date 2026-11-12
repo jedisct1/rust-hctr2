@@ -16,13 +16,11 @@ aes = "0.9.4"
 polyval = "0.7.3"
 sha2 = { version = "0.11.1", default-features = false }
 cipher = "0.5.2"
-
-[dev-dependencies]
-ct-codecs = "1.1.8"
+ct-codecs = { version = "1.1.8", default-features = false }
 
 [features]
 default = ["std"]
-std = []
+std = ["ct-codecs/std"]
 
 [profile.release]
 lto = true

@@ -1,12 +1,14 @@
 # hctr2-rs
 
-Pure Rust implementation of HCTR2, HCTR3, and their beyond-birthday-bound secure variants (CHCTR2, HCTR2-TwKD, HCTR2++), plus format-preserving variants.
+Pure Rust implementation of HCTR2, HCTR3, and their beyond-birthday-bound secure variants (CHCTR2, HCTR2-TwKD, HCTR2++), plus format-preserving variants and a key-committing authenticated mode (CACH-CHCTR2).
 
 This is a port of [zig-hctr2](https://github.com/jedisct1/zig-hctr2).
 
 HCTR2 and HCTR3 are length-preserving tweakable wide-block encryption modes. CHCTR2 and HCTR2-TwKD are beyond-birthday-bound (BBB) secure variants that achieve approximately 85-bit security instead of HCTR2's 64-bit birthday-bound security. The format-preserving variants (HCTR2-FP and HCTR3-FP) are also length-preserving and additionally preserve character sets (e.g., decimal digits remain decimal).
 
 These modes are designed for full-disk encryption, filename encryption, and other applications where nonces and authentication tags would be impractical.
+
+CACH-CHCTR2 is the exception: it adds a key-committing authentication tag to CHCTR2.
 
 ## What is HCTR2/HCTR3?
 
@@ -113,6 +115,26 @@ Security degrades with the number of queries sharing the same tweak, so tweaks s
 be unique or only lightly reused.
 
 Reference: "HCTR++: A Beyond Birthday Bound Secure HCTR2 Variant" (Ozturk, Kocak, Yayla, 2026)
+
+### CACH-CHCTR2 (Key-Committing Authenticated Encryption)
+
+Use CACH-CHCTR2 when you need:
+
+- Authenticated encryption that tolerates nonce reuse
+- Key commitment: nobody can find a ciphertext and a tag that are valid under two keys
+- Beyond-birthday-bound security (~85-bit), like CHCTR2
+
+CACH encrypts the message with CHCTR2, then computes a tag with AES.
+Both CHCTR2 keys come from a single AES key.
+
+A 32-byte tag gives 128 bits of key-committing security.
+`CachChctr2<Aes, 16>` uses a 16-byte tag, which gives 64 bits.
+Put the nonce and the associated data in the tweak.
+Messages must be at least 32 bytes long.
+
+Each message costs one CHCTR2 call, five AES calls and one AES key schedule.
+
+Reference: "More Keys, Less Commitment: Key-Committing Attacks on BBB Accordions via Encode-then-Encipher and a Key-Committing Transform"
 
 ### Format-Preserving Variants (HCTR2-FP and HCTR3-FP)
 
@@ -327,6 +349,32 @@ fn main() -> Result<(), hctr2_rs::Error> {
 }
 ```
 
+### CACH-CHCTR2 Encryption (Key-Committing Authenticated Encryption)
+
+```rust
+use hctr2_rs::CachChctr2_128;
+
+fn main() -> Result<(), hctr2_rs::Error> {
+    let key = [0u8; 16];
+    let cipher = CachChctr2_128::new(&key);
+
+    // Messages must be at least 32 bytes long.
+    let plaintext = b"a message of at least 32 bytes..";
+
+    let tweak = b"nonce-and-associated-data";
+    let mut ciphertext = [0u8; 32];
+
+    let tag = cipher.encrypt(plaintext, tweak, &mut ciphertext)?;
+
+    // A wrong key, tweak, ciphertext or tag gives Error::AuthenticationFailed.
+    let mut decrypted = [0u8; 32];
+    cipher.decrypt(&ciphertext, &tag, tweak, &mut decrypted)?;
+
+    assert_eq!(plaintext, &decrypted);
+    Ok(())
+}
+```
+
 ### Format-Preserving Encryption (Decimal)
 
 ```rust
@@ -358,9 +406,12 @@ fn main() -> Result<(), hctr2_rs::Hctr2FpError> {
 
 HCTR2 and HCTR3 provide confidentiality only, not authenticity. They do not detect tampering or forgery. If your threat model includes active attackers who can modify ciphertexts, you need additional authentication (e.g., HMAC, digital signatures) or should use an authenticated encryption mode like AES-GCM instead.
 
+CACH-CHCTR2 is the exception: decryption fails with `Error::AuthenticationFailed` if anything was changed.
+
 ### Minimum message lengths
 
 - HCTR2/HCTR3: 16 bytes minimum
+- CACH-CHCTR2: 32 bytes minimum
 - HCTR2-FP/HCTR3-FP: depends on radix (e.g., 39 digits for radix-10, 32 digits for radix-16, 22 digits for radix-64)
 
 Messages shorter than the minimum will return an `InputTooShort` error.
@@ -395,6 +446,7 @@ Both HCTR2 and HCTR3 are designed to leverage AES-NI instructions on modern proc
 - [HCTR3](https://csrc.nist.gov/files/pubs/sp/800/197/iprd/docs/3_samvadini.pdf) - NIST SP 800-197 Workshop presentation
 - [Beyond-Birthday-Bound Security with HCTR2](https://doi.org/10.1007/978-981-95-5018-0_1) - Chen, Y.L., et al. (ASIACRYPT 2025, LNCS 16245, pp. 3-34)
 - "HCTR++: A Beyond Birthday Bound Secure HCTR2 Variant" - Gulnihal Ozturk, Onur Kocak, Oguz Yayla (2026)
+- More Keys, Less Commitment: Key-Committing Attacks on BBB Accordions via Encode-then-Encipher and a Key-Committing Transform - Donghoon Chang, Yukihito Hiraga, Yusuke Naito, Yu Sasaki, Takeshi Sugawara
 
 ## License
 

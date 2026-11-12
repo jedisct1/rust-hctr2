@@ -22,6 +22,8 @@ pub enum Error {
     InvalidDigit,
     /// Output buffer length does not match input length.
     OutputLengthMismatch,
+    /// The authentication tag is not valid.
+    AuthenticationFailed,
 }
 
 impl core::fmt::Display for Error {
@@ -33,6 +35,7 @@ impl core::fmt::Display for Error {
             Error::InvalidTweak => write!(f, "invalid tweak format"),
             Error::InvalidDigit => write!(f, "digit out of range for radix"),
             Error::OutputLengthMismatch => write!(f, "output length does not match input length"),
+            Error::AuthenticationFailed => write!(f, "authentication failed"),
         }
     }
 }

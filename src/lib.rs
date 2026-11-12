@@ -1,7 +1,8 @@
 //! HCTR2 and HCTR3 length-preserving encryption library.
 //!
 //! This crate provides implementations of HCTR2 and HCTR3 wide-block tweakable ciphers,
-//! including their beyond-birthday-bound (BBB) secure variants and format-preserving modes.
+//! including their beyond-birthday-bound (BBB) secure variants and format-preserving modes,
+//! plus a key-committing authenticated mode built on CHCTR2.
 //!
 //! # Overview
 //!
@@ -17,6 +18,7 @@
 //! - **CHCTR2**: Cascaded HCTR2 with ~85-bit multi-user security
 //! - **HCTR2-TwKD**: HCTR2 with tweak-based key derivation for BBB security
 //! - **HCTR2++**: HCTR2 with R3 fresh re-keying and a 2n-bit hash for BBB security
+//! - **CACH-CHCTR2**: CHCTR2 with a key-committing authentication tag
 //! - **HCTR2-FP/HCTR3-FP**: Format-preserving variants for encrypting structured data
 //!
 //! # Quick Start
@@ -69,8 +71,8 @@
 //! # Security Considerations
 //!
 //! - **Never reuse (key, tweak) pairs**: Each encryption must use a unique tweak
-//! - **No authentication**: These are encryption-only modes; use AEAD for integrity
-//! - **Minimum message length**: 16 bytes for HCTR2/HCTR3, varies by radix for FP modes
+//! - **No authentication**: Only CACH-CHCTR2 has a tag; use AEAD with the other modes for integrity
+//! - **Minimum message length**: 16 bytes for HCTR2/HCTR3, 32 bytes for CACH-CHCTR2, varies by radix for FP modes
 //!
 //! # Feature Flags
 //!
@@ -79,6 +81,7 @@
 
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 
+pub mod cach_chctr2;
 pub mod chctr2;
 pub mod common;
 pub mod hctr2;
@@ -91,6 +94,7 @@ pub mod hctr3fp;
 #[cfg(test)]
 mod cross_check;
 
+pub use cach_chctr2::{CachChctr2, CachChctr2_128, CachChctr2_256};
 #[allow(deprecated)]
 pub use chctr2::Chctr2Error;
 pub use chctr2::{Chctr2, Chctr2_128, Chctr2_256};

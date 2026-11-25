@@ -43,6 +43,31 @@ impl core::fmt::Display for Error {
 #[cfg(feature = "std")]
 impl std::error::Error for Error {}
 
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+cpufeatures::new!(crypto_extensions, "aes");
+#[cfg(target_arch = "x86_64")]
+cpufeatures::new!(crypto_extensions, "aes", "pclmulqdq", "sse2");
+
+/// Whether the CPU has AES and carryless multiplication instructions.
+///
+/// Like the `aes` and `polyval` crates, this trusts `cpufeatures`, which on aarch64 Linux accepts a CPU that only reports one of AES and PMULL.
+pub(crate) fn has_crypto_extensions() -> bool {
+    #[cfg(any(
+        all(target_arch = "aarch64", target_endian = "little"),
+        target_arch = "x86_64"
+    ))]
+    {
+        crypto_extensions::get()
+    }
+    #[cfg(not(any(
+        all(target_arch = "aarch64", target_endian = "little"),
+        target_arch = "x86_64"
+    )))]
+    {
+        false
+    }
+}
+
 /// AES block length in bytes.
 pub const BLOCK_LENGTH: usize = 16;
 

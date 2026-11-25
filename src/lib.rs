@@ -2,7 +2,7 @@
 //!
 //! This crate provides implementations of HCTR2 and HCTR3 wide-block tweakable ciphers,
 //! including their beyond-birthday-bound (BBB) secure variants and format-preserving modes,
-//! plus a key-committing authenticated mode built on CHCTR2.
+//! plus committing authenticated modes built on CHCTR2 and HCENC.
 //!
 //! # Overview
 //!
@@ -19,6 +19,8 @@
 //! - **HCTR2-TwKD**: HCTR2 with tweak-based key derivation for BBB security
 //! - **HCTR2++**: HCTR2 with R3 fresh re-keying and a 2n-bit hash for BBB security
 //! - **CACH-CHCTR2**: CHCTR2 with a key-committing authentication tag
+//! - **HCENC**: an AES-128 wide-block cipher with about 116 bits of security
+//! - **EtES-HCENC, UCX-HCENC**: authenticated HCENC that commits to the key, or with UCX-HCENC also to all the inputs
 //! - **HCTR2-FP/HCTR3-FP**: Format-preserving variants for encrypting structured data
 //!
 //! # Quick Start
@@ -71,8 +73,8 @@
 //! # Security Considerations
 //!
 //! - **Never reuse (key, tweak) pairs**: Each encryption must use a unique tweak
-//! - **No authentication**: Only CACH-CHCTR2 has a tag; use AEAD with the other modes for integrity
-//! - **Minimum message length**: 16 bytes for HCTR2/HCTR3, 32 bytes for CACH-CHCTR2, varies by radix for FP modes
+//! - **No authentication**: Only CACH-CHCTR2, EtES-HCENC and UCX-HCENC authenticate; use AEAD with the other modes for integrity
+//! - **Minimum message length**: 16 bytes for HCTR2/HCTR3, 32 bytes for CACH-CHCTR2 and the HCENC modes, varies by radix for FP modes
 //!
 //! # Feature Flags
 //!
@@ -81,9 +83,11 @@
 
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 
+mod aes_once;
 pub mod cach_chctr2;
 pub mod chctr2;
 pub mod common;
+pub mod hcenc;
 pub mod hctr2;
 pub mod hctr2_twkd;
 pub mod hctr2fp;
@@ -93,12 +97,17 @@ pub mod hctr3fp;
 
 #[cfg(test)]
 mod cross_check;
+mod dual_polyval;
 
 pub use cach_chctr2::{CachChctr2, CachChctr2_128, CachChctr2_256};
 #[allow(deprecated)]
 pub use chctr2::Chctr2Error;
 pub use chctr2::{Chctr2, Chctr2_128, Chctr2_256};
 pub use common::Error;
+pub use hcenc::{
+    DEFAULT_FRAME_WIDTH, EtesHcenc, EtesHcenc_128, Hcenc, Hcenc_128, UcxHcenc, UcxHcenc_Cmt1,
+    UcxHcenc_Cmt4,
+};
 #[allow(deprecated)]
 pub use hctr2::Hctr2Error;
 pub use hctr2::{AesCipher, Hctr2, Hctr2_128, Hctr2_256};

@@ -1,6 +1,6 @@
 [package]
 name = "hctr2-rs"
-version = "0.11.2"
+version = "0.11.3"
 edition = "2024"
 repository = "https://github.com/jedisct1/rust-hctr2"
 description = "HCTR2 and HCTR3 wide-block encryption in pure Rust, with length-preserving and format-preserving modes for disk sectors and filenames"

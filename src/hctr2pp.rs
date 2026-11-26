@@ -62,10 +62,11 @@ fn bmul64(x: u64, y: u64) -> u128 {
     const M2: u128 = M0 << 2;
     const M3: u128 = M0 << 3;
 
-    let x0 = (x as u128) & M0;
-    let x1 = (x as u128) & M1;
-    let x2 = (x as u128) & M2;
-    let x3 = (x as u128) & M3;
+    let xh = (x & !0xf) as u128;
+    let x0 = xh & M0;
+    let x1 = xh & M1;
+    let x2 = xh & M2;
+    let x3 = xh & M3;
     let y0 = (y as u128) & M0;
     let y1 = (y as u128) & M1;
     let y2 = (y as u128) & M2;
@@ -76,7 +77,13 @@ fn bmul64(x: u64, y: u64) -> u128 {
     let z2 = (x0 * y2) ^ (x1 * y1) ^ (x2 * y0) ^ (x3 * y3);
     let z3 = (x0 * y3) ^ (x1 * y2) ^ (x2 * y1) ^ (x3 * y0);
 
-    (z0 & M0) | (z1 & M1) | (z2 & M2) | (z3 & M3)
+    let mut low: u128 = 0;
+    for k in 0..4 {
+        let mask = 0u64.wrapping_sub((x >> k) & 1);
+        low ^= ((mask & y) as u128) << k;
+    }
+
+    ((z0 & M0) | (z1 & M1) | (z2 & M2) | (z3 & M3)) ^ low
 }
 
 /// Multiplication in GF(2^256) defined by x^256 + x^10 + x^5 + x^2 + 1.
@@ -427,6 +434,29 @@ mod tests {
             let a = random_elem(&mut state);
             let b = random_elem(&mut state);
             assert_eq!(gf_mul(&a, &b), slow_mul(&a, &b));
+        }
+    }
+
+    #[test]
+    fn test_gf_mul_matches_reference_on_dense_operands() {
+        let ones: Elem = [u64::MAX; 4];
+        assert_eq!(gf_mul(&ones, &ones), slow_mul(&ones, &ones));
+
+        let classes = [
+            0x1111_1111_1111_1111u64,
+            0x2222_2222_2222_2222,
+            0x4444_4444_4444_4444,
+            0x8888_8888_8888_8888,
+        ];
+        let mut state = 0x0fed_cba9_8765_4321u64;
+        for cx in classes {
+            for cy in classes {
+                let mut a = random_elem(&mut state);
+                let mut b = random_elem(&mut state);
+                a[1] |= cx;
+                b[2] |= cy;
+                assert_eq!(gf_mul(&a, &b), slow_mul(&a, &b));
+            }
         }
     }
 
